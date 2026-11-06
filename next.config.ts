@@ -1,10 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "export",
   reactStrictMode: true,
   eslint: {
-    // Abaikan peringatan tanda petik ESLint saat proses build
     ignoreDuringBuilds: true,
+  },
+  images: {
+    unoptimized: true,
   },
 };
 
