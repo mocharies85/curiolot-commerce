@@ -1,8 +1,6 @@
-export const runtime = "edge";
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { 
@@ -14,11 +12,10 @@ import {
   Sparkles, 
   Copy, 
   Check, 
-  ExternalLink,
-  HelpCircle
+  ExternalLink 
 } from "lucide-react";
 
-export default function OrderSuccessPage() {
+function SuccessContent() {
   const params = useParams();
   const searchParams = useSearchParams();
 
@@ -38,7 +35,6 @@ export default function OrderSuccessPage() {
 
   const handleTriggerDownload = () => {
     setIsDownloading(true);
-    // Simulasi pengunduhan file digital arsip
     setTimeout(() => {
       setIsDownloading(false);
       alert("Your download has started! Check your browser's download manager.");
@@ -118,7 +114,6 @@ export default function OrderSuccessPage() {
               </div>
             </div>
 
-            {/* Direct Download Button */}
             <button
               type="button"
               onClick={handleTriggerDownload}
@@ -184,5 +179,13 @@ export default function OrderSuccessPage() {
 
       </main>
     </div>
+  );
+}
+
+export default function OrderSuccessPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-xs text-slate-400">Loading order details...</div>}>
+      <SuccessContent />
+    </Suspense>
   );
 }
