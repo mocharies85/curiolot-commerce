@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Search, 
   ShoppingBag, 
@@ -27,7 +28,8 @@ import {
   Lock,
   Mail,
   User,
-  ArrowRight
+  ArrowRight,
+  AlertCircle
 } from "lucide-react";
 import type { Product } from "@/lib/products";
 import type { StoreSettings } from "@/lib/storeSettings";
@@ -46,6 +48,8 @@ const CATEGORIES = [
 ];
 
 export default function StoreView({ username }: StoreViewProps) {
+  const router = useRouter();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<StoreSettings | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,10 +68,13 @@ export default function StoreView({ username }: StoreViewProps) {
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
   const [authStoreName, setAuthStoreName] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
   const logoFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Ambil data produk publik dan pengaturan toko dari API secara sinkron
+  // Ambil data produk publik dan pengaturan toko dari API
   useEffect(() => {
     async function loadStoreData() {
       try {
@@ -95,20 +102,86 @@ export default function StoreView({ username }: StoreViewProps) {
     loadStoreData();
   }, [username]);
 
-  // Buka modal sesuai tombol yang diklik
+  // Buka modal sesuai tab yang diklik
   const openAuth = (mode: "login" | "signup" | "seller") => {
     setAuthMode(mode);
+    setAuthError("");
     setShowAuthModal(true);
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Handler Autentikasi Nyata
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authMode === "seller") {
-      alert(`Welcome to Curiolot Creators! Redirecting to setup store for "${authStoreName || "Your Store"}".`);
-      window.location.href = "/dashboard";
-    } else {
-      alert(`Welcome back! Successfully authenticated as ${authEmail}.`);
+    setAuthError("");
+    setIsSubmittingAuth(true);
+
+    try {
+      if (authMode === "seller") {
+        alert(`Welcome to Curiolot Creators! Redirecting to setup store for "${authStoreName || "Your Store"}".`);
+        setShowAuthModal(false);
+        router.push("/dashboard");
+        return;
+      }
+
+      if (authMode === "signup") {
+        if (!agreeTerms) {
+          setAuthError("You must agree to the Terms of Service and Privacy Policy to create an account.");
+          setIsSubmittingAuth(false);
+          return;
+        }
+
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: authName,
+            email: authEmail,
+            password: authPassword,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setAuthError(data.error || "Failed to create account. Please try again.");
+          return;
+        }
+
+        alert("Account registered successfully! Redirecting to your dashboard...");
+        setShowAuthModal(false);
+        router.push("/dashboard");
+        return;
+      }
+
+      // Log In Flow
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: authEmail,
+          password: authPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setAuthError(data.error || "Invalid email or password. Please verify your credentials.");
+        return;
+      }
+
+      // Simpan session pengguna di browser
+      if (typeof window !== "undefined") {
+        localStorage.setItem("curiolot_session", JSON.stringify(data.user || { email: authEmail }));
+      }
+
+      alert(`Welcome back, ${data.user?.name || authEmail}!`);
       setShowAuthModal(false);
+      router.push("/dashboard");
+    } catch (err) {
+      setAuthError("Network connection error. Please try again.");
+    } finally {
+      setIsSubmittingAuth(false);
     }
   };
 
@@ -355,10 +428,10 @@ export default function StoreView({ username }: StoreViewProps) {
             </div>
           </div>
 
-          {/* Marketplace Navigation: Sell, Log In, Sign Up, Wishlist, Cart */}
+          {/* Marketplace Navigation */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
-            {/* 1. Sell on Curiolot (Membuka Modal Pendaftaran Kreator) */}
+            {/* 1. Sell on Curiolot */}
             <button
               type="button"
               onClick={() => openAuth("seller")}
@@ -368,7 +441,7 @@ export default function StoreView({ username }: StoreViewProps) {
               <span>Sell on Curiolot</span>
             </button>
 
-            {/* 2. Log In (Membuka Modal Login) */}
+            {/* 2. Log In */}
             <button
               type="button"
               onClick={() => openAuth("login")}
@@ -377,7 +450,7 @@ export default function StoreView({ username }: StoreViewProps) {
               Log In
             </button>
 
-            {/* 3. Sign Up (Membuka Modal Sign Up) */}
+            {/* 3. Sign Up */}
             <button
               type="button"
               onClick={() => openAuth("signup")}
@@ -386,7 +459,6 @@ export default function StoreView({ username }: StoreViewProps) {
               Sign Up
             </button>
 
-            {/* Divider */}
             <div className="hidden sm:block h-5 w-px bg-slate-200 mx-1" />
 
             {/* 4. Wishlist */}
@@ -709,7 +781,7 @@ export default function StoreView({ username }: StoreViewProps) {
         </section>
       )}
 
-      {/* 6. AUTH & CREATOR POP-UP MODAL (Bergaya Redbubble / Gumroad) */}
+      {/* 6. AUTH & CREATOR POP-UP MODAL */}
       {showAuthModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
@@ -739,11 +811,22 @@ export default function StoreView({ username }: StoreViewProps) {
               </p>
             </div>
 
+            {/* Error Notification Banner */}
+            {authError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{authError}</span>
+              </div>
+            )}
+
             {/* Tab Navigasi Modal */}
             <div className="flex rounded-xl bg-slate-100 p-1 mb-5 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setAuthMode("login")}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
                   authMode === "login" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500 hover:text-slate-900"
                 }`}
@@ -752,7 +835,10 @@ export default function StoreView({ username }: StoreViewProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode("signup")}
+                onClick={() => {
+                  setAuthMode("signup");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
                   authMode === "signup" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500 hover:text-slate-900"
                 }`}
@@ -761,7 +847,10 @@ export default function StoreView({ username }: StoreViewProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode("seller")}
+                onClick={() => {
+                  setAuthMode("seller");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
                   authMode === "seller" ? "bg-white text-indigo-600 shadow-xs font-bold" : "text-slate-500 hover:text-slate-900"
                 }`}
@@ -836,16 +925,50 @@ export default function StoreView({ username }: StoreViewProps) {
                 </div>
               </div>
 
+              {/* Checkbox Persetujuan Ketentuan (Sign Up Mode) */}
+              {authMode === "signup" && (
+                <div className="flex items-start gap-2.5 text-left pt-1">
+                  <input
+                    type="checkbox"
+                    id="agreeTerms"
+                    checked={agreeTerms}
+                    onChange={(e) => setAgreeTerms(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                    required
+                  />
+                  <label htmlFor="agreeTerms" className="text-xs text-slate-500 leading-snug cursor-pointer select-none">
+                    I agree to the{" "}
+                    <Link href="/terms" target="_blank" className="font-semibold text-slate-900 underline hover:text-slate-700">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link href="/privacy" target="_blank" className="font-semibold text-slate-900 underline hover:text-slate-700">
+                      Privacy Policy
+                    </Link>.
+                  </label>
+                </div>
+              )}
+
+              {/* Tombol Aksi Submit */}
               <button
                 type="submit"
-                className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer flex items-center justify-center gap-1.5"
+                disabled={isSubmittingAuth || (authMode === "signup" && !agreeTerms)}
+                className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer flex items-center justify-center gap-1.5"
               >
-                <span>{authMode === "seller" ? "Create Creator Store" : authMode === "login" ? "Log In" : "Create Account"}</span>
+                <span>
+                  {isSubmittingAuth 
+                    ? "Processing..." 
+                    : authMode === "seller" 
+                    ? "Create Creator Store" 
+                    : authMode === "login" 
+                    ? "Log In" 
+                    : "Create Account"}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
 
-            {/* Pintasan Cepat untuk Masuk ke Dashboard Pengujian */}
+            {/* Pintasan ke Admin Portal */}
             <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
               <span>Looking for admin portal?</span>
               <Link
