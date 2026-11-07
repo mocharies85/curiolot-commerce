@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCloudflareContext } from "@cloudflare/next-on-pages";
+import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const username = searchParams.get("username") || "aries";
 
-    const { env } = getCloudflareContext();
+    const { env } = getRequestContext();
     const db = (env as any).DB;
 
     if (!db) {

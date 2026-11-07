@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCloudflareContext } from "@cloudflare/next-on-pages";
+import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Email/username and password are required" }, { status: 400 });
     }
 
-    const { env } = getCloudflareContext();
+    const { env } = getRequestContext();
     const db = (env as any).DB;
 
     if (!db) {
