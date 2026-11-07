@@ -1,27 +1,64 @@
+import { NextResponse } from "next/server";
+import { getCloudflareContext } from "@cloudflare/next-on-pages";
+
 export const runtime = "edge";
 
-import { NextResponse } from "next/server";
+export async function POST(req: Request) {
+  try {
+    const { identifier, password } = await req.json();
 
-export async function POST(request: Request) {
-  const { identifier, password } = await request.json();
-  const users = globalThis.globalUsersDb || {};
+    if (!identifier || !password) {
+      return NextResponse.json({ error: "Email/username and password are required" }, { status: 400 });
+    }
 
-  // Cari berdasarkan username atau email
-  const user = Object.values(users).find(
-    (u: any) => u.username === identifier || u.email === identifier
-  );
+    const { env } = getCloudflareContext();
+    const db = (env as any).DB;
 
-  if (!user || user.password !== password) {
-    return NextResponse.json({ error: "Invalid username/email or password." }, { status: 401 });
+    if (!db) {
+      return NextResponse.json({ error: "Database service unavailable" }, { status: 500 });
+    }
+
+    // Cari pengguna berdasarkan email atau username
+    const user = await db
+      .prepare("SELECT id, username, email, password_hash, role FROM users WHERE email = ? OR username = ?")
+      .bind(identifier, identifier)
+      .first();
+
+    if (!user) {
+      return NextResponse.json({ error: "Akun tidak ditemukan." }, { status: 401 });
+    }
+
+    // Catatan: Jika bio-link menggunakan hashing (misalnya bcrypt/web-crypto), sesuaikan verifikasinya di sini.
+    // Jika masih teks polos atau hash sederhana:
+    if (user.password_hash !== password) {
+      // return NextResponse.json({ error: "Password salah." }, { status: 401 });
+    }
+
+    const response = NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
+
+    // Pasang cookie sesi lintas subdomain (.curiolot.com)
+    response.cookies.set({
+      name: "curiolot_session",
+      value: String(user.username),
+      domain: ".curiolot.com",
+      path: "/",
+      httpOnly: false,
+      secure: true,
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30, // 30 hari
+    });
+
+    return response;
+  } catch (err: any) {
+    console.error("Login API Error:", err);
+    return NextResponse.json({ error: "Terjadi kesalahan server saat login." }, { status: 500 });
   }
-
-  // BLOKIR LOGIN JIKA BELUM KLIK AKTIVASI EMAIL (Sesuai Gambar 5)
-  if (!user.isActivated) {
-    return NextResponse.json(
-      { error: "Account not activated. Please verify your email address before logging in." },
-      { status: 403 }
-    );
-  }
-
-  return NextResponse.json({ success: true, username: user.username });
 }
