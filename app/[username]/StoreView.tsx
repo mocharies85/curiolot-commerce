@@ -39,12 +39,12 @@ interface StoreViewProps {
 }
 
 const CATEGORIES = [
-  { name: "All Assets", icon: Sparkles, match: [] },
+  { name: "All Assets", icon: Sparkles, match: [] as string[] },
   { name: "Vectors & Logos", icon: Layers, match: ["vector", "logo"] },
   { name: "3D Assets", icon: Box, match: ["3d"] },
   { name: "E-Books & Guides", icon: BookOpen, match: ["e-book", "guide", "book"] },
   { name: "Templates", icon: SlidersHorizontal, match: ["template"] },
-  { name: "Special Deals", icon: Percent, match: [], highlight: true },
+  { name: "Special Deals", icon: Percent, match: [] as string[], highlight: true },
 ];
 
 export default function StoreView({ username }: StoreViewProps) {
@@ -83,14 +83,14 @@ export default function StoreView({ username }: StoreViewProps) {
           fetch(`/api/products?username=${username}&public=true`)
         ]);
 
-        const settingsData = await settingsRes.json();
-        const productsData = await productsRes.json();
+        const settingsData: any = await settingsRes.json();
+        const productsData: any = await productsRes.json();
 
         if (settingsData && settingsData.username) {
-          setSettings(settingsData);
+          setSettings(settingsData as StoreSettings);
         }
         if (Array.isArray(productsData)) {
-          setProducts(productsData);
+          setProducts(productsData as Product[]);
         }
       } catch (err) {
         console.error("Failed to load storefront data:", err);
@@ -140,10 +140,10 @@ export default function StoreView({ username }: StoreViewProps) {
           }),
         });
 
-        const data = await res.json();
+        const data: any = await res.json();
 
         if (!res.ok) {
-          setAuthError(data.error || "Failed to create account. Please try again.");
+          setAuthError(data?.error || "Failed to create account. Please try again.");
           return;
         }
 
@@ -163,19 +163,19 @@ export default function StoreView({ username }: StoreViewProps) {
         }),
       });
 
-      const data = await res.json();
+      const data: any = await res.json();
 
       if (!res.ok) {
-        setAuthError(data.error || "Invalid email or password. Please verify your credentials.");
+        setAuthError(data?.error || "Invalid email or password. Please verify your credentials.");
         return;
       }
 
       // Simpan session pengguna di browser
       if (typeof window !== "undefined") {
-        localStorage.setItem("curiolot_session", JSON.stringify(data.user || { email: authEmail }));
+        localStorage.setItem("curiolot_session", JSON.stringify(data?.user || { email: authEmail }));
       }
 
-      alert(`Welcome back, ${data.user?.name || authEmail}!`);
+      alert(`Welcome back, ${data?.user?.name || authEmail}!`);
       setShowAuthModal(false);
       router.push("/dashboard");
     } catch (err) {
@@ -485,7 +485,7 @@ export default function StoreView({ username }: StoreViewProps) {
             {/* Bio Link Pill */}
             <a
               href={`https://link.curiolot.com/${username}`}
-              target="_blank"
+              target="_self"
               rel="noopener noreferrer"
               className="hidden xl:inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 px-3 py-1.5 rounded-full transition ml-1"
             >

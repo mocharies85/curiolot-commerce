@@ -12,8 +12,8 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
-    const username = body.username || "aries";
+    const body: any = await request.json();
+    const username = body?.username || "aries";
     const updated = updateStoreSettings(username, body);
     return NextResponse.json(updated);
   } catch (error) {

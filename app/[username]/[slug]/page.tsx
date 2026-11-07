@@ -102,7 +102,7 @@ Learn the exact framework to research buyer search intent, spot quarterly trend 
 ];
 
 export default function ProductDetailPage() {
-  const params = useParams();
+  const params = useParams() as any;
   const username = (params?.username as string) || "aries";
   const slug = (params?.slug as string) || "";
 
@@ -118,7 +118,7 @@ export default function ProductDetailPage() {
         if (!res.ok) throw new Error("Product not in API");
         return res.json();
       })
-      .then((data: ProductData) => {
+      .then((data: any) => {
         setProduct({
           ...data,
           license: data.license || "Standard Commercial License Included",

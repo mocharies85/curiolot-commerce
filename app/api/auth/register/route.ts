@@ -18,9 +18,9 @@ if (!globalThis.globalUsersDb) {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
+  const body: any = await request.json();
   const { username, email, password, agreedToTerms } = body;
-
+  
   if (!agreedToTerms) {
     return NextResponse.json({ error: "You must accept the Terms of Service." }, { status: 400 });
   }

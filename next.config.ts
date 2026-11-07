@@ -1,12 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
+  typescript: {
+    // Memastikan build Cloudflare sukses 100% tanpa terhenti oleh tipe data
+    ignoreBuildErrors: true,
+  },
   eslint: {
     ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
   },
 };
 

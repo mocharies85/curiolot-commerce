@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 function SuccessContent() {
-  const params = useParams();
+  const params = useParams() as any;
   const searchParams = useSearchParams();
 
   const username = (params?.username as string) || "aries";
