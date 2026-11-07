@@ -1,5 +1,3 @@
-export const runtime = "edge";
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -115,7 +113,6 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!username || !slug) return;
 
-    // 1. Coba ambil produk dari API backend
     fetch(`/api/products?username=${username}&slug=${slug}`)
       .then((res) => {
         if (!res.ok) throw new Error("Product not in API");
@@ -134,7 +131,6 @@ export default function ProductDetailPage() {
         });
       })
       .catch(() => {
-        // 2. Jika tidak ada di API, cocokkan dengan fallback database
         const fallback = FALLBACK_PRODUCTS.find((p) => p.slug.toLowerCase() === slug.toLowerCase());
         setProduct(fallback || null);
       })
@@ -157,7 +153,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  // Jika produk benar-benar tidak ditemukan
   if (!product) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4 text-center">
