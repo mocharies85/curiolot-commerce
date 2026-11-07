@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -20,9 +20,6 @@ import {
   Check, 
   ExternalLink, 
   PackageOpen, 
-  Camera, 
-  UploadCloud, 
-  Info,
   Heart,
   Store,
   Lock,
@@ -57,8 +54,6 @@ export default function StoreView({ username }: StoreViewProps) {
   const [selectedCategory, setSelectedCategory] = useState("All Assets");
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedCoupon, setCopiedCoupon] = useState(false);
-  const [showLogoGuide, setShowLogoGuide] = useState(false);
-  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
 
   // Auth Modal States
@@ -71,8 +66,6 @@ export default function StoreView({ username }: StoreViewProps) {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [authError, setAuthError] = useState("");
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
-
-  const logoFileInputRef = useRef<HTMLInputElement>(null);
 
   // Ambil data produk publik dan pengaturan toko dari API
   useEffect(() => {
@@ -194,52 +187,6 @@ export default function StoreView({ username }: StoreViewProps) {
     return raw.slice(0, 2).toUpperCase();
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 3 * 1024 * 1024) {
-      alert("Logo file size exceeds 3 MB. Please upload an image smaller than 3 MB.");
-      if (logoFileInputRef.current) logoFileInputRef.current.value = "";
-      return;
-    }
-
-    setIsUploadingLogo(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64Data = reader.result as string;
-      setSettings((prev) => prev ? { ...prev, logoUrl: base64Data } : undefined);
-
-      try {
-        await fetch("/api/settings", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, logoUrl: base64Data }),
-        });
-      } catch (err) {
-        console.error("Failed to sync store logo:", err);
-      } finally {
-        setIsUploadingLogo(false);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleResetLogo = async () => {
-    setSettings((prev) => prev ? { ...prev, logoUrl: "" } : undefined);
-    if (logoFileInputRef.current) logoFileInputRef.current.value = "";
-    
-    try {
-      await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, logoUrl: "" }),
-      });
-    } catch (err) {
-      console.error("Failed to reset logo:", err);
-    }
-  };
-
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCoupon(true);
@@ -292,17 +239,9 @@ export default function StoreView({ username }: StoreViewProps) {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo */}
-          <div className="flex items-center gap-4 shrink-0 relative">
-            <input
-              type="file"
-              ref={logoFileInputRef}
-              accept="image/png, image/jpeg, image/webp, image/svg+xml"
-              className="hidden"
-              onChange={handleLogoUpload}
-            />
-
-            <div className="relative group/avatar shrink-0">
+          {/* Brand Identity & Logo (Read-only untuk Publik) */}
+          <div className="flex items-center gap-4 shrink-0">
+            <div className="shrink-0">
               {settings?.logoUrl ? (
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-200/90 bg-white shadow-xs p-1.5 flex items-center justify-center">
                   <img
@@ -316,17 +255,6 @@ export default function StoreView({ username }: StoreViewProps) {
                   {getInitials(settings?.storeTitle)}
                 </div>
               )}
-
-              <button
-                type="button"
-                onClick={() => logoFileInputRef.current?.click()}
-                disabled={isUploadingLogo}
-                className="absolute inset-0 bg-slate-950/70 text-white rounded-2xl opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer shadow-sm"
-                title="Click to replace store logo"
-              >
-                <Camera className="w-5 h-5" />
-                <span className="text-[10px] font-bold mt-1">Change</span>
-              </button>
             </div>
 
             <div>
@@ -336,74 +264,8 @@ export default function StoreView({ username }: StoreViewProps) {
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100 shrink-0" />
               </div>
-
-              <div className="flex items-center gap-2.5 mt-1">
-                <span className="text-xs text-slate-400 font-medium">Official Creator Storefront</span>
-                
-                <button
-                  type="button"
-                  onClick={() => setShowLogoGuide(!showLogoGuide)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 transition bg-indigo-50/80 px-2 py-0.5 rounded-md cursor-pointer"
-                >
-                  <Info className="w-3 h-3" />
-                  <span>Logo Specs</span>
-                </button>
-
-                {settings?.logoUrl && (
-                  <button
-                    type="button"
-                    onClick={handleResetLogo}
-                    className="text-[11px] text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                    title="Reset to default initials"
-                  >
-                    • Reset
-                  </button>
-                )}
-              </div>
+              <p className="text-xs text-slate-400 font-medium mt-1">Official Creator Storefront</p>
             </div>
-
-            {showLogoGuide && (
-              <div className="absolute top-22 left-0 z-50 w-76 p-4 bg-white rounded-2xl border border-slate-200 shadow-xl text-left animate-in fade-in slide-in-from-top-1">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                    <UploadCloud className="w-4 h-4 text-indigo-600" />
-                    <span>Store Logo Guidelines</span>
-                  </span>
-                  <button
-                    onClick={() => setShowLogoGuide(false)}
-                    className="text-slate-400 hover:text-slate-600 cursor-pointer"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <ul className="mt-2.5 space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
-                  <li>
-                    <strong>Optimal Resolution:</strong> <strong>512 × 512 px</strong> (or <strong>1024 × 1024 px</strong>).
-                  </li>
-                  <li>
-                    <strong>Aspect Ratio:</strong> Exact <strong>1:1 Square</strong>.
-                  </li>
-                  <li>
-                    <strong>Max File Size:</strong> <strong>3 MB</strong>.
-                  </li>
-                  <li>
-                    <strong>Formats:</strong> PNG, JPG, WEBP, or SVG.
-                  </li>
-                </ul>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowLogoGuide(false);
-                    logoFileInputRef.current?.click();
-                  }}
-                  className="mt-3 w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 text-center cursor-pointer"
-                >
-                  Upload New Logo Image
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Search Bar */}
@@ -482,7 +344,7 @@ export default function StoreView({ username }: StoreViewProps) {
               </span>
             </div>
 
-            {/* Bio Link Pill */}
+            {/* Bio Link Pill (Perpindahan di tab yang sama) */}
             <a
               href={`https://link.curiolot.com/${username}`}
               target="_self"
