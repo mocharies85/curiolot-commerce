@@ -11,10 +11,14 @@ import {
   CheckCircle2, 
   Share2, 
   ExternalLink,
-  Check
+  Check,
+  FileText,
+  HardDrive,
+  AlertCircle
 } from "lucide-react";
 
 interface ProductData {
+  id?: string;
   slug: string;
   title: string;
   category: string;
@@ -24,14 +28,14 @@ interface ProductData {
   fileSize?: string;
   license?: string;
   description: string;
-  features: string[];
+  features?: string[];
   coverUrl: string;
   paymentUrl?: string;
   sellerCheckoutUrl?: string;
   badge?: string;
 }
 
-// Fallback database untuk produk demo/bawaan
+// Fallback products if API or D1 record is pending
 const FALLBACK_PRODUCTS: ProductData[] = [
   {
     slug: "linocut-animal-pack",
@@ -113,22 +117,45 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!username || !slug) return;
 
-    fetch(`/api/products?username=${username}&slug=${slug}`)
+    fetch(`/api/products?username=${username}`)
       .then((res) => {
-        if (!res.ok) throw new Error("Product not in API");
+        if (!res.ok) throw new Error("API response error");
         return res.json();
       })
       .then((data: any) => {
-        setProduct({
-          ...data,
-          license: data.license || "Standard Commercial License Included",
-          fileSize: data.fileSize || "Digital Archive",
-          features: Array.isArray(data.features) 
-            ? data.features 
-            : typeof data.features === "string" 
-            ? (data.features as string).split("\n").filter((f: string) => f.trim() !== "")
-            : []
-        });
+        let matched: any = null;
+
+        if (Array.isArray(data)) {
+          matched = data.find((p: any) => p.slug?.toLowerCase() === slug.toLowerCase());
+        } else if (data && typeof data === "object" && data.slug) {
+          matched = data;
+        }
+
+        if (!matched) {
+          matched = FALLBACK_PRODUCTS.find((p) => p.slug.toLowerCase() === slug.toLowerCase());
+        }
+
+        if (matched) {
+          setProduct({
+            ...matched,
+            price: Number(matched.price) || 0,
+            originalPrice: matched.originalPrice != null ? Number(matched.originalPrice) : undefined,
+            license: matched.license || "Standard Commercial License Included",
+            fileFormat: matched.fileFormat || "Digital Asset (ZIP/PDF)",
+            fileSize: matched.fileSize || "Instant Download",
+            features: Array.isArray(matched.features)
+              ? matched.features
+              : typeof matched.features === "string"
+              ? (matched.features as string).split("\n").filter((f: string) => f.trim() !== "")
+              : [
+                  "Instant digital asset download link",
+                  "Lifetime access to file updates",
+                  "Standard commercial license included"
+                ]
+          });
+        } else {
+          setProduct(null);
+        }
       })
       .catch(() => {
         const fallback = FALLBACK_PRODUCTS.find((p) => p.slug.toLowerCase() === slug.toLowerCase());
@@ -147,8 +174,9 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-slate-400 text-xs font-semibold">
-        Loading product details...
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4">
+        <div className="w-10 h-10 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin mb-3" />
+        <p className="text-xs font-semibold text-slate-500">Loading digital asset...</p>
       </div>
     );
   }
@@ -156,23 +184,29 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-4 text-center">
+        <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
         <h1 className="text-2xl font-bold text-slate-900">Product Not Found</h1>
-        <p className="text-sm text-slate-500 mt-2">The digital product you are looking for does not exist.</p>
+        <p className="text-xs text-slate-500 mt-2 max-w-sm leading-relaxed">
+          The digital asset you are looking for does not exist or may have been unlisted by the creator.
+        </p>
         <Link
           href={`/${username}`}
-          className="mt-6 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition"
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-semibold hover:bg-slate-800 transition shadow-xs"
         >
-          Return to Store
+          <ArrowLeft className="w-4 h-4" />
+          <span>Return to Storefront</span>
         </Link>
       </div>
     );
   }
 
+  const price = Number(product.price) || 0;
+  const originalPrice = product.originalPrice != null ? Number(product.originalPrice) : null;
   const checkoutLink = product.paymentUrl || product.sellerCheckoutUrl || "#";
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-24 font-sans antialiased">
-      {/* 1. Header Navigasi */}
+      {/* 1. Header Navigation */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link
@@ -189,7 +223,7 @@ export default function ProductDetailPage() {
               type="button"
               onClick={handleShare}
               className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition cursor-pointer relative"
-              title="Copy link to product"
+              title="Copy product link"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
             </button>
@@ -197,11 +231,11 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      {/* 2. Konten Detail Produk */}
+      {/* 2. Product Details Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
           
-          {/* Kolom Kiri: Cover & Deskripsi */}
+          {/* Left Column: Visual Preview & Description */}
           <div className="lg:col-span-7 space-y-8">
             <div className="rounded-3xl overflow-hidden border border-slate-200/80 bg-white shadow-xs">
               <div className="relative aspect-4/3 w-full bg-black overflow-hidden flex items-center justify-center">
@@ -229,7 +263,7 @@ export default function ProductDetailPage() {
               {product.features && product.features.length > 0 && (
                 <div className="pt-6 border-t border-slate-100">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">
-                    What's Inside The Download
+                    What&apos;s Included In This Download
                   </h3>
                   <ul className="space-y-3">
                     {product.features.map((item, idx) => (
@@ -244,7 +278,7 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          {/* Kolom Kanan: Panel Checkout Sticky */}
+          {/* Right Column: Sticky Checkout Card */}
           <div className="lg:col-span-5">
             <div className="sticky top-24 bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-lg shadow-slate-200/40 space-y-6">
               <div>
@@ -256,22 +290,22 @@ export default function ProductDetailPage() {
                 </h1>
               </div>
 
-              {/* Harga Dinamis */}
+              {/* Dynamic Price Display */}
               <div className="flex items-baseline gap-3 pb-6 border-b border-slate-100">
-                {product.price === 0 ? (
+                {price === 0 ? (
                   <span className="text-3xl font-black text-emerald-600">FREE</span>
                 ) : (
                   <>
                     <span className="text-3xl font-black text-slate-900">
-                      ${product.price.toFixed(2)}
+                      ${price.toFixed(2)}
                     </span>
-                    {product.originalPrice && product.originalPrice > product.price && (
+                    {originalPrice && originalPrice > price && (
                       <>
                         <span className="text-sm font-medium text-slate-400 line-through">
-                          ${product.originalPrice.toFixed(2)}
+                          ${originalPrice.toFixed(2)}
                         </span>
                         <span className="ml-auto px-2.5 py-1 rounded-md text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-200/60">
-                          Save {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}%
+                          Save {Math.round(((originalPrice - price) / originalPrice) * 100)}%
                         </span>
                       </>
                     )}
@@ -279,12 +313,12 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              {/* Tombol Aksi Beli / Unduh Gratis */}
+              {/* Buy / Download Action Buttons */}
               <div className="space-y-3">
-                {product.price === 0 ? (
+                {price === 0 ? (
                   <button
                     type="button"
-                    onClick={() => alert("Free download link generated!")}
+                    onClick={() => alert("Free download link generated successfully!")}
                     className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-emerald-700 transition active:scale-95 shadow-md shadow-emerald-600/10 cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
@@ -295,7 +329,7 @@ export default function ProductDetailPage() {
                     href={checkoutLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3.5 px-6 rounded-2xl bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer"
+                    className="w-full py-3.5 px-6 rounded-2xl bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer text-center"
                   >
                     <span>Buy Now & Instant Download</span>
                     <ExternalLink className="w-4 h-4" />
@@ -303,21 +337,21 @@ export default function ProductDetailPage() {
                 )}
 
                 <p className="text-[11px] text-center text-slate-400">
-                  {product.price === 0
+                  {price === 0
                     ? "Direct instant access provided upon request"
-                    : "Direct payment processed securely via creator's gateway"}
+                    : "Direct payment processed securely via creator's checkout"}
                 </p>
               </div>
 
-              {/* Detail Spesifikasi File */}
+              {/* File Specs Details */}
               <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 text-xs text-slate-600 border border-slate-100">
                 <div className="flex justify-between">
                   <span className="text-slate-400">File Type:</span>
-                  <span className="font-semibold text-slate-800">{product.fileFormat || "PDF"}</span>
+                  <span className="font-semibold text-slate-800">{product.fileFormat || "Digital Archive"}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Size:</span>
-                  <span className="font-semibold text-slate-800">{product.fileSize || "Digital Archive"}</span>
+                  <span className="text-slate-400">File Size:</span>
+                  <span className="font-semibold text-slate-800">{product.fileSize || "Instant ZIP"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">License:</span>
@@ -325,15 +359,15 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Keamanan */}
+              {/* Security & Guarantees */}
               <div className="pt-2 space-y-2">
                 <div className="flex items-center gap-2.5 text-xs text-slate-500">
                   <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Instant file download link delivered upon completion</span>
+                  <span>Instant file download delivered after purchase</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-xs text-slate-500">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Verified clean & virus-scanned digital archive</span>
+                  <span>Verified clean & virus-scanned archive</span>
                 </div>
               </div>
 
