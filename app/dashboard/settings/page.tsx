@@ -61,7 +61,7 @@ export default function StoreSettingsPage() {
   useEffect(() => {
     fetch(`/api/settings?username=${username}`)
       .then((res) => res.json())
-      .then((data) => {
+      .then((data: any) => {
         if (data && data.username) {
           setSettings((prev) => ({
             ...prev,
