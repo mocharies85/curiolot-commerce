@@ -24,6 +24,44 @@ import type { StoreSettings } from "@/lib/storeSettings";
 
 const DEFAULT_HERO_BANNER = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80";
 
+// Helper: Compress high-res uploaded images to lightweight JPEG via Canvas
+const compressImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.8): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(event.target?.result as string);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => resolve(event.target?.result as string);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
 export default function YourStorePage() {
   const username = "aries";
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
@@ -39,7 +77,7 @@ export default function YourStorePage() {
 
   const [settings, setSettings] = useState<StoreSettings>({
     username: "aries",
-    storeTitle: "Digital Creator Studio",
+    storeTitle: "Aries Store",
     logoUrl: "",
     payoutProvider: "paypal",
     payoutPaypalHandle: "curiolot",
@@ -71,16 +109,34 @@ export default function YourStorePage() {
   });
 
   useEffect(() => {
+    // Read local cache first for instant UI response
+    let localData: any = null;
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(`curiolot_store_settings_${username}`);
+      if (stored) {
+        try {
+          localData = JSON.parse(stored);
+          if (localData && typeof localData === "object") {
+            setSettings((prev) => ({ ...prev, ...localData }));
+          }
+        } catch (e) {}
+      }
+    }
+
     fetch(`/api/settings?username=${username}`)
       .then((res) => res.json())
-      .then((data: StoreSettings) => {
+      .then((data: any) => {
         if (data && data.username) {
           setSettings((prev) => ({ 
             ...prev, 
             ...data,
-            storeTitle: data.storeTitle || "Digital Creator Studio",
-            heroImageUrl: data.heroImageUrl || DEFAULT_HERO_BANNER,
-            bundleDownloadUrl: data.bundleDownloadUrl || "",
+            storeTitle: data.storeTitle || localData?.storeTitle || "Aries Store",
+            heroImageUrl: data.heroImageUrl || data.bannerUrl || localData?.heroImageUrl || DEFAULT_HERO_BANNER,
+            logoUrl: data.logoUrl || localData?.logoUrl || "",
+            bundleDownloadUrl: data.bundleDownloadUrl || localData?.bundleDownloadUrl || "",
+            showHero: typeof data.showHero !== "undefined" ? Boolean(data.showHero) : prev.showHero,
+            showBundle: typeof data.showBundle !== "undefined" ? Boolean(data.showBundle) : prev.showBundle,
+            showPromoStrip: typeof data.showPromoStrip !== "undefined" ? Boolean(data.showPromoStrip) : prev.showPromoStrip,
           }));
         }
       })
@@ -109,9 +165,13 @@ export default function YourStorePage() {
         return settings.payoutCustomUrl || "#";
       case "paypal":
       default: {
-        const cleanHandle = (settings.payoutPaypalHandle || username)
+        let cleanHandle = (settings.payoutPaypalHandle || "curiolot")
           .replace(/^https?:\/\/paypal\.me\//i, "")
-          .replace(/\/.*$/, "");
+          .replace(/\/.*$/, "")
+          .trim();
+        if (!cleanHandle || cleanHandle.toLowerCase() === "aries") {
+          cleanHandle = "curiolot";
+        }
         return `https://paypal.me/${cleanHandle}/${numericPrice.toFixed(2)}USD`;
       }
     }
@@ -124,12 +184,11 @@ export default function YourStorePage() {
     settings.payoutPaddleUrl, 
     settings.payoutKofiUrl, 
     settings.payoutCustomUrl, 
-    bundlePrice, 
-    username
+    bundlePrice
   ]);
 
   const getInitials = (title: string) => {
-    if (!title) return "CS";
+    if (!title) return "AS";
     const words = title.trim().split(/\s+/);
     if (words.length >= 2) {
       return (words[0][0] + words[1][0]).toUpperCase();
@@ -137,41 +196,31 @@ export default function YourStorePage() {
     return title.slice(0, 2).toUpperCase();
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert("Logo image exceeds 2 MB. Please upload a smaller image.");
-      return;
+    try {
+      // Auto-compress logo to lightweight 256x256 image (~25 KB)
+      const compressed = await compressImage(file, 256, 256, 0.85);
+      setSettings((prev) => ({ ...prev, logoUrl: compressed }));
+    } catch (err) {
+      console.error("Failed to compress logo:", err);
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        setSettings((prev) => ({ ...prev, logoUrl: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
-  const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Banner file size exceeds 5 MB. Please upload a smaller image.");
-      return;
-    }
-
     setUploadBannerName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        setSettings((prev) => ({ ...prev, heroImageUrl: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Auto-compress banner to 1400x500 JPEG (~70 KB) to respect D1 statement limit
+      const compressed = await compressImage(file, 1400, 500, 0.8);
+      setSettings((prev) => ({ ...prev, heroImageUrl: compressed }));
+    } catch (err) {
+      console.error("Failed to compress banner:", err);
+    }
   };
 
   const handleResetBanner = () => {
@@ -186,19 +235,49 @@ export default function YourStorePage() {
 
     const payloadToSave = {
       ...settings,
+      username,
+      storeTitle: settings.storeTitle.trim() || "Aries Store",
+      storeName: settings.storeTitle.trim() || "Aries Store",
+      bannerUrl: settings.heroImageUrl,
+      heroImageUrl: settings.heroImageUrl,
+      showHero: settings.showHero,
+      showHeroBanner: settings.showHero,
+      showBundle: settings.showBundle,
+      showBundleCard: settings.showBundle,
+      isBundleActive: settings.showBundle,
+      showPromoStrip: settings.showPromoStrip,
+      showDiscountCoupon: settings.showPromoStrip,
+      isCouponActive: settings.showPromoStrip,
       bundleUrl: autoLockedBundlePaymentUrl,
+      payoutPaypalHandle: settings.payoutPaypalHandle || "curiolot",
+      paypalHandle: settings.payoutPaypalHandle || "curiolot",
     };
 
     try {
-      await fetch("/api/settings", {
-        method: "PATCH",
+      // Use POST to guarantee D1 insertion and avoid 405 Method Not Allowed
+      const res = await fetch("/api/settings", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payloadToSave),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${res.status}`);
+      }
+
+      // Synchronize directly to localStorage for instant local reflection
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`curiolot_store_settings_${username}`, JSON.stringify(payloadToSave));
+        localStorage.setItem("curiolot_store_settings", JSON.stringify(payloadToSave));
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
+      alert("Store appearance and branding saved successfully!");
+    } catch (err: any) {
       console.error("Failed to save store settings:", err);
+      alert("Failed to save settings: " + (err.message || "Network error"));
     } finally {
       setIsSaving(false);
     }
@@ -254,7 +333,7 @@ export default function YourStorePage() {
                 required
                 value={settings.storeTitle}
                 onChange={(e) => setSettings({ ...settings, storeTitle: e.target.value })}
-                placeholder="e.g. Digital Creator Studio"
+                placeholder="e.g. Aries Store"
                 className="w-full px-4 py-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 transition font-medium"
               />
             </div>
@@ -492,14 +571,14 @@ export default function YourStorePage() {
                     <p className="text-xs font-bold text-slate-800">
                       {uploadBannerName ? `Selected: ${uploadBannerName}` : "Click to upload banner background image"}
                     </p>
-                    <p className="text-[10px] text-slate-400">Optimal size: 1920 × 480 px (4:1 ratio)</p>
+                    <p className="text-[10px] text-slate-400">Auto-compressed safely for instant database synchronization</p>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* 3. Bundle Offer Card Settings (Synchronized to Gateway + Instant Delivery Link) */}
+          {/* 3. Bundle Offer Card Settings */}
           <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
