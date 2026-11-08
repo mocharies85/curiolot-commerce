@@ -27,8 +27,8 @@ export default function NewProductPage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Testing mode toggle: Free Plan (50 MB) vs Pro Plan (2 GB)
-  const [isPro, setIsPro] = useState(false);
+  // Status paket akun: membaca database D1 secara otomatis (bukan toggle manual)
+  const [isPro, setIsPro] = useState(true);
 
   // Form states
   const [title, setTitle] = useState("");
@@ -66,11 +66,11 @@ export default function NewProductPage() {
   const FREE_MAX_SIZE_MB = 50;
   const PRO_MAX_SIZE_GB = 2;
 
-  // 1. Ambil pengaturan rekening lengkap yang tersimpan di menu Earnings
+  // 1. Ambil pengaturan rekening dan status akun resmi dari database D1
   useEffect(() => {
     fetch(`/api/settings?username=${username}`)
       .then((res) => res.json())
-      .then((data: StoreSettings) => {
+      .then((data: any) => {
         if (data) {
           if (data.payoutProvider) setPayoutProvider(data.payoutProvider);
           if (data.payoutPaypalHandle) setPaypalHandle(data.payoutPaypalHandle);
@@ -79,6 +79,15 @@ export default function NewProductPage() {
           if (data.payoutPaddleUrl) setPaddleUrl(data.payoutPaddleUrl);
           if (data.payoutKofiUrl) setKofiUrl(data.payoutKofiUrl);
           if (data.payoutCustomUrl) setCustomUrl(data.payoutCustomUrl);
+
+          // Sinkronisasi status akun Pro dari superadmin D1
+          if (typeof data.isPro !== "undefined") {
+            setIsPro(Boolean(data.isPro));
+          } else if (data.plan) {
+            setIsPro(data.plan === "pro");
+          } else if (typeof data.is_pro !== "undefined") {
+            setIsPro(Boolean(data.is_pro));
+          }
         }
       })
       .catch((err) => console.error("Failed to load payout settings:", err));
@@ -253,20 +262,19 @@ export default function NewProductPage() {
             <span>Cancel & Back</span>
           </Link>
 
+          {/* Area Kanan Atas: Terkunci Read-Only Sesuai Database */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsPro(!isPro)}
-              className={`text-[11px] font-semibold px-3 py-1 rounded-full border transition cursor-pointer ${
+            <div
+              className={`text-[11px] font-semibold px-3.5 py-1.5 rounded-full border select-none ${
                 isPro 
-                  ? "bg-amber-50 text-amber-800 border-amber-200" 
+                  ? "bg-amber-50 text-amber-900 border-amber-200/80 font-bold" 
                   : "bg-slate-100 text-slate-600 border-slate-200"
               }`}
-              title="Click to toggle between Free and Pro upload testing"
+              title="Plan status is managed centrally via Curiolot Admin"
             >
-              Mode: {isPro ? "★ Pro Plan (2 GB)" : "Free Plan (50 MB)"}
-            </button>
-            <span className="text-xs text-slate-400 font-medium">New Digital Asset</span>
+              {isPro ? "★ Pro Plan Active (2 GB Vault)" : "Free Plan (50 MB Vault)"}
+            </div>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">New Digital Asset</span>
           </div>
         </div>
       </header>
@@ -516,7 +524,6 @@ export default function NewProductPage() {
                       </p>
                     </div>
 
-                    {/* Quick Specs Guidelines */}
                     <div className="rounded-xl bg-amber-50/70 border border-amber-200/80 p-3 text-[11px] text-amber-950 space-y-1">
                       <div className="flex items-center gap-1.5 font-bold text-amber-900">
                         <Info className="w-3.5 h-3.5 text-amber-700 shrink-0" />
@@ -627,13 +634,15 @@ export default function NewProductPage() {
                   ) : (
                     <>
                       <div className="w-10 h-10 rounded-full bg-white shadow-2xs border border-slate-200 flex items-center justify-center text-slate-600 group-hover:scale-105 transition mb-2">
-                        <UploadCloud className="w-5 h-5 text-indigo-600" />
+                        <UploadCloud className="w-4 h-4 text-indigo-600" />
                       </div>
                       <p className="text-xs font-bold text-slate-800">
                         Click to browse or drag and drop your product archive
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Free plan: up to <strong>50 MB</strong> • Upgrade to Pro for large files up to <strong>2 GB</strong>
+                        {isPro 
+                          ? "Pro account active: large vault storage up to 2 GB." 
+                          : "Free plan limit: up to 50 MB."}
                       </p>
                     </>
                   )}
@@ -762,12 +771,12 @@ export default function NewProductPage() {
 
             <div className="mt-6 flex flex-col gap-2">
               <a
-                href="https://buy.paddle.com"
+                href="https://link.curiolot.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold text-center hover:bg-slate-800 transition shadow-sm active:scale-95"
               >
-                Upgrade to Pro for $5/Month
+                Contact Admin or Upgrade at link.curiolot.com
               </a>
               <button
                 type="button"
