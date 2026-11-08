@@ -67,21 +67,74 @@ export default function StoreView({ username }: StoreViewProps) {
   const [authError, setAuthError] = useState("");
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Ambil data produk publik dan pengaturan toko dari API
+  // Load public products and store customization from API & Local Persistence
   useEffect(() => {
     async function loadStoreData() {
       try {
+        // 1. Read local storage cache for instant banner/logo sync
+        let localSettings: any = null;
+        if (typeof window !== "undefined") {
+          const keysToTry = [
+            `curiolot_store_settings_${username}`,
+            "curiolot_store_settings",
+            `store_settings_${username}`,
+            "store_settings",
+            "curiolot_store_customization",
+          ];
+          for (const key of keysToTry) {
+            const stored = localStorage.getItem(key);
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (parsed && typeof parsed === "object") {
+                  localSettings = { ...localSettings, ...parsed };
+                }
+              } catch (e) {}
+            }
+          }
+        }
+
+        // 2. Fetch from D1 API
         const [settingsRes, productsRes] = await Promise.all([
           fetch(`/api/settings?username=${username}`),
           fetch(`/api/products?username=${username}&public=true`)
         ]);
 
-        const settingsData: any = await settingsRes.json();
-        const productsData: any = await productsRes.json();
+        const settingsData: any = await settingsRes.json().catch(() => ({}));
+        const productsData: any = await productsRes.json().catch(() => []);
 
-        if (settingsData && settingsData.username) {
-          setSettings(settingsData as StoreSettings);
+        // Merge API data with local customization
+        const mergedSettings: any = {
+          ...(localSettings || {}),
+          ...(settingsData || {}),
+        };
+
+        if (localSettings) {
+          if (localSettings.logoUrl || localSettings.storeLogo || localSettings.logo) {
+            mergedSettings.logoUrl = localSettings.logoUrl || localSettings.storeLogo || localSettings.logo;
+          }
+          if (localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl) {
+            mergedSettings.heroImageUrl = localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl;
+          }
+          if (localSettings.heroHeadline || localSettings.mainHeadline) {
+            mergedSettings.heroTitle = localSettings.heroHeadline || localSettings.mainHeadline;
+          }
+          if (localSettings.subHeadline || localSettings.heroDescription) {
+            mergedSettings.heroDescription = localSettings.subHeadline || localSettings.heroDescription;
+          }
+          if (localSettings.badgeTag || localSettings.heroBadge) {
+            mergedSettings.heroBadge = localSettings.badgeTag || localSettings.heroBadge;
+          }
+          if (typeof localSettings.showBundle !== "undefined") mergedSettings.showBundle = localSettings.showBundle;
+          if (typeof localSettings.showBundleCard !== "undefined") mergedSettings.showBundleCard = localSettings.showBundleCard;
+          if (typeof localSettings.isBundleActive !== "undefined") mergedSettings.isBundleActive = localSettings.isBundleActive;
+          if (typeof localSettings.showPromoStrip !== "undefined") mergedSettings.showPromoStrip = localSettings.showPromoStrip;
+          if (typeof localSettings.showDiscountCoupon !== "undefined") mergedSettings.showDiscountCoupon = localSettings.showDiscountCoupon;
+          if (typeof localSettings.isCouponActive !== "undefined") mergedSettings.isCouponActive = localSettings.isCouponActive;
         }
+
+        setSettings(mergedSettings as StoreSettings);
+
         if (Array.isArray(productsData)) {
           setProducts(productsData as Product[]);
         }
@@ -95,14 +148,12 @@ export default function StoreView({ username }: StoreViewProps) {
     loadStoreData();
   }, [username]);
 
-  // Buka modal sesuai tab yang diklik
   const openAuth = (mode: "login" | "signup" | "seller") => {
     setAuthMode(mode);
     setAuthError("");
     setShowAuthModal(true);
   };
 
-  // Handler Autentikasi Nyata
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -163,7 +214,6 @@ export default function StoreView({ username }: StoreViewProps) {
         return;
       }
 
-      // Simpan session pengguna di browser
       if (typeof window !== "undefined") {
         localStorage.setItem("curiolot_session", JSON.stringify(data?.user || { email: authEmail }));
       }
@@ -225,12 +275,105 @@ export default function StoreView({ username }: StoreViewProps) {
     });
   }, [products, selectedCategory, searchQuery]);
 
-  const showBundle = settings?.showBundle !== false;
-  const showPromoStrip = settings?.showPromoStrip !== false;
+  // Robust field normalization
+  const storeLogo = 
+    settings?.logoUrl || 
+    (settings as any)?.logo_url || 
+    (settings as any)?.storeLogo || 
+    (settings as any)?.store_logo || 
+    (settings as any)?.avatarUrl || 
+    (settings as any)?.logo;
 
-  const showBadge = settings?.showHeroBadge !== false && Boolean(settings?.heroBadge);
-  const showTitle = settings?.showHeroTitle !== false && Boolean(settings?.heroTitle);
-  const showDesc = settings?.showHeroDescription !== false && Boolean(settings?.heroDescription);
+  const storeTitleText = 
+    settings?.storeTitle || 
+    (settings as any)?.store_title || 
+    (settings as any)?.storeName || 
+    (settings as any)?.store_name || 
+    `${username} Store`;
+
+  const heroBannerImage = 
+    settings?.heroImageUrl || 
+    (settings as any)?.hero_image_url || 
+    (settings as any)?.bannerUrl || 
+    (settings as any)?.banner_url || 
+    (settings as any)?.bannerImageUrl || 
+    (settings as any)?.banner_image_url || 
+    (settings as any)?.heroImage;
+
+  const heroHeadlineText = 
+    settings?.heroTitle || 
+    (settings as any)?.hero_title || 
+    (settings as any)?.heroHeadline || 
+    (settings as any)?.hero_headline || 
+    (settings as any)?.mainHeadline || 
+    (settings as any)?.headline || 
+    (settings as any)?.title;
+
+  const heroDescriptionText = 
+    settings?.heroDescription || 
+    (settings as any)?.hero_description || 
+    (settings as any)?.subHeadline || 
+    (settings as any)?.sub_headline || 
+    (settings as any)?.description;
+
+  const heroBadgeText = 
+    settings?.heroBadge || 
+    (settings as any)?.hero_badge || 
+    (settings as any)?.badgeTag || 
+    (settings as any)?.badgeTagText || 
+    (settings as any)?.badge;
+
+  const isHeroVisible = 
+    (settings as any)?.showHero !== false && 
+    (settings as any)?.showHeroBanner !== false && 
+    (settings as any)?.bannerActive !== false && 
+    (settings as any)?.isHeroActive !== false;
+
+  // Strict check for Hidden Bundle Offer Card
+  const isBundleHidden = 
+    (settings as any)?.showBundle === false ||
+    (settings as any)?.showBundle === 0 ||
+    (settings as any)?.showBundle === "hidden" ||
+    (settings as any)?.showBundleCard === false ||
+    (settings as any)?.showBundleCard === 0 ||
+    (settings as any)?.showBundleCard === "hidden" ||
+    (settings as any)?.isBundleActive === false ||
+    (settings as any)?.isBundleActive === 0 ||
+    (settings as any)?.isBundleActive === "hidden" ||
+    (settings as any)?.bundleActive === false ||
+    (settings as any)?.bundleActive === 0 ||
+    (settings as any)?.bundleStatus === "hidden" ||
+    (settings as any)?.bundleCardStatus === "hidden" ||
+    (settings as any)?.is_bundle_active === 0 ||
+    (settings as any)?.is_bundle_active === false;
+
+  const showBundle = !isBundleHidden;
+
+  // Strict check for Hidden Discount Coupon Strip
+  const isCouponHidden = 
+    (settings as any)?.showPromoStrip === false ||
+    (settings as any)?.showPromoStrip === 0 ||
+    (settings as any)?.showPromoStrip === "hidden" ||
+    (settings as any)?.showDiscountCoupon === false ||
+    (settings as any)?.showDiscountCoupon === 0 ||
+    (settings as any)?.showDiscountCoupon === "hidden" ||
+    (settings as any)?.isCouponActive === false ||
+    (settings as any)?.isCouponActive === 0 ||
+    (settings as any)?.isCouponActive === "hidden" ||
+    (settings as any)?.couponActive === false ||
+    (settings as any)?.couponActive === 0 ||
+    (settings as any)?.promoActive === false ||
+    (settings as any)?.promoActive === 0 ||
+    (settings as any)?.couponStatus === "hidden" ||
+    (settings as any)?.promoStatus === "hidden" ||
+    (settings as any)?.is_coupon_active === 0 ||
+    (settings as any)?.is_coupon_active === false;
+
+  const showPromoStrip = !isCouponHidden;
+
+  const showBadge = Boolean(heroBadgeText);
+  const showTitle = Boolean(heroHeadlineText);
+  const showDesc = Boolean(heroDescriptionText);
   const hasHeroText = showBadge || showTitle || showDesc;
 
   return (
@@ -239,20 +382,20 @@ export default function StoreView({ username }: StoreViewProps) {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo (Read-only untuk Publik) */}
+          {/* Brand Identity & Logo */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="shrink-0">
-              {settings?.logoUrl ? (
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-200/90 bg-white shadow-xs p-1.5 flex items-center justify-center">
+              {storeLogo ? (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-200/90 bg-white shadow-xs p-1 flex items-center justify-center">
                   <img
-                    src={settings.logoUrl}
-                    alt={settings.storeTitle || `${username} Store`}
+                    src={storeLogo}
+                    alt={storeTitleText}
                     className="w-full h-full object-contain"
                   />
                 </div>
               ) : (
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-extrabold text-2xl shadow-sm tracking-wider">
-                  {getInitials(settings?.storeTitle)}
+                  {getInitials(storeTitleText)}
                 </div>
               )}
             </div>
@@ -260,7 +403,7 @@ export default function StoreView({ username }: StoreViewProps) {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-slate-900 text-lg sm:text-xl capitalize tracking-tight">
-                  {settings?.storeTitle || `${username} Store`}
+                  {storeTitleText}
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100 shrink-0" />
               </div>
@@ -292,8 +435,6 @@ export default function StoreView({ username }: StoreViewProps) {
 
           {/* Marketplace Navigation */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            
-            {/* 1. Sell on Curiolot */}
             <button
               type="button"
               onClick={() => openAuth("seller")}
@@ -303,7 +444,6 @@ export default function StoreView({ username }: StoreViewProps) {
               <span>Sell on Curiolot</span>
             </button>
 
-            {/* 2. Log In */}
             <button
               type="button"
               onClick={() => openAuth("login")}
@@ -312,7 +452,6 @@ export default function StoreView({ username }: StoreViewProps) {
               Log In
             </button>
 
-            {/* 3. Sign Up */}
             <button
               type="button"
               onClick={() => openAuth("signup")}
@@ -323,7 +462,6 @@ export default function StoreView({ username }: StoreViewProps) {
 
             <div className="hidden sm:block h-5 w-px bg-slate-200 mx-1" />
 
-            {/* 4. Wishlist */}
             <button
               type="button"
               onClick={() => setIsWishlisted(!isWishlisted)}
@@ -333,7 +471,6 @@ export default function StoreView({ username }: StoreViewProps) {
               <Heart className={`w-4 h-4 transition ${isWishlisted ? "text-rose-600 fill-rose-600" : ""}`} />
             </button>
 
-            {/* 5. Cart Button */}
             <div
               className="w-10 h-10 rounded-full border border-slate-200 flex items-center justify-center text-slate-700 hover:bg-slate-50 cursor-pointer relative transition"
               title="Shopping Bag"
@@ -344,7 +481,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </span>
             </div>
 
-            {/* Bio Link Pill (Perpindahan di tab yang sama) */}
             <a
               href={`https://link.curiolot.com/${username}`}
               target="_self"
@@ -354,7 +490,6 @@ export default function StoreView({ username }: StoreViewProps) {
               <span>Bio Link</span>
               <ArrowUpRight className="w-3 h-3" />
             </a>
-
           </div>
 
         </div>
@@ -396,31 +531,34 @@ export default function StoreView({ username }: StoreViewProps) {
       </section>
 
       {/* 3. Hero Showcase Banner */}
-      {settings?.showHero !== false && (
+      {isHeroVisible && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
-          <div className="relative rounded-3xl overflow-hidden bg-slate-900 text-white min-h-[300px] sm:min-h-[340px] flex items-center shadow-xl">
+          <div className="relative rounded-3xl overflow-hidden bg-slate-950 text-white min-h-[300px] sm:min-h-[340px] flex items-center shadow-xl">
             <img
-              src={settings?.heroImageUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"}
+              src={heroBannerImage || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"}
               alt="Hero Visual"
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-                hasHeroText ? "opacity-30 mix-blend-overlay" : "opacity-100"
+                hasHeroText ? "opacity-45" : "opacity-100"
               }`}
             />
+            {hasHeroText && (
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/60 to-transparent z-0" />
+            )}
             {hasHeroText && (
               <div className="relative z-10 p-8 sm:p-12 max-w-2xl space-y-4">
                 {showBadge && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-xs font-semibold text-white border border-white/20">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> {settings?.heroBadge}
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" /> {heroBadgeText}
                   </span>
                 )}
                 {showTitle && (
                   <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-                    {settings?.heroTitle}
+                    {heroHeadlineText}
                   </h1>
                 )}
                 {showDesc && (
                   <p className="text-sm sm:text-base text-slate-300 max-w-lg leading-relaxed">
-                    {settings?.heroDescription}
+                    {heroDescriptionText}
                   </p>
                 )}
               </div>
@@ -457,7 +595,7 @@ export default function StoreView({ username }: StoreViewProps) {
 
         <div className={`grid grid-cols-1 ${showBundle ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-8`}>
           
-          {/* Side Promo Card (Bundle Offer) */}
+          {/* Side Promo Card (Bundle Offer) - Strictly hidden when set to Hidden */}
           {showBundle && (
             <div className="lg:col-span-1 rounded-3xl bg-linear-to-b from-amber-500 to-amber-600 p-8 text-white flex flex-col justify-between shadow-lg relative overflow-hidden">
               <div className="relative z-10 space-y-4">
@@ -598,7 +736,7 @@ export default function StoreView({ username }: StoreViewProps) {
         </div>
       </section>
 
-      {/* 5. Promotional Discount Strip */}
+      {/* 5. Promotional Discount Strip - Strictly hidden when set to Hidden */}
       {showPromoStrip && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-16">
           <div className="bg-amber-400 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">
@@ -647,8 +785,6 @@ export default function StoreView({ username }: StoreViewProps) {
       {showAuthModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
-            
-            {/* Tombol Close */}
             <button
               onClick={() => setShowAuthModal(false)}
               className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 transition cursor-pointer"
@@ -656,7 +792,6 @@ export default function StoreView({ username }: StoreViewProps) {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Header Modal Dinamis */}
             <div className="mb-6">
               <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-3 shadow-sm">
                 {authMode === "seller" ? <Store className="w-6 h-6 text-indigo-400" /> : <Lock className="w-6 h-6" />}
@@ -673,7 +808,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </p>
             </div>
 
-            {/* Error Notification Banner */}
             {authError && (
               <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
@@ -681,7 +815,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </div>
             )}
 
-            {/* Tab Navigasi Modal */}
             <div className="flex rounded-xl bg-slate-100 p-1 mb-5 text-xs font-semibold">
               <button
                 type="button"
@@ -721,7 +854,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </button>
             </div>
 
-            {/* Form Input */}
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               {authMode === "signup" && (
                 <div>
@@ -787,7 +919,6 @@ export default function StoreView({ username }: StoreViewProps) {
                 </div>
               </div>
 
-              {/* Checkbox Persetujuan Ketentuan (Sign Up Mode) */}
               {authMode === "signup" && (
                 <div className="flex items-start gap-2.5 text-left pt-1">
                   <input
@@ -811,7 +942,6 @@ export default function StoreView({ username }: StoreViewProps) {
                 </div>
               )}
 
-              {/* Tombol Aksi Submit */}
               <button
                 type="submit"
                 disabled={isSubmittingAuth || (authMode === "signup" && !agreeTerms)}
@@ -830,7 +960,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </button>
             </form>
 
-            {/* Pintasan ke Admin Portal */}
             <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
               <span>Looking for admin portal?</span>
               <Link
