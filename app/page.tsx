@@ -1,5 +1,7 @@
 "use client";
 
+export const runtime = "edge";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,10 +26,10 @@ import {
   Heart, 
   TrendingUp, 
   Zap, 
-  ShieldCheck,
-  Globe2,
-  FileCheck,
-  Compass
+  ShieldCheck, 
+  Globe2, 
+  FileCheck, 
+  Compass 
 } from "lucide-react";
 import CuriolotLogo from "@/components/CuriolotLogo";
 
@@ -114,7 +116,6 @@ export default function LandingHomePage() {
   const [authError, setAuthError] = useState("");
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Ambil data produk nyata dari database D1
   useEffect(() => {
     fetch("/api/products?all=true")
       .then((res) => res.json())
@@ -169,7 +170,6 @@ export default function LandingHomePage() {
         return;
       }
 
-      // Login Flow
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
