@@ -29,7 +29,6 @@ import {
   FileCheck,
   Compass
 } from "lucide-react";
-import type { Product } from "@/lib/products";
 import CuriolotLogo from "@/components/CuriolotLogo";
 
 const MARKETPLACE_CATEGORIES = [
@@ -41,7 +40,6 @@ const MARKETPLACE_CATEGORIES = [
   { name: "Special Deals", icon: Percent, match: [] as string[], highlight: true },
 ];
 
-// Fallback trending catalog jika database D1 masih dalam proses inisialisasi produk
 const INITIAL_FALLBACK_PRODUCTS: any[] = [
   {
     id: "item_1",
@@ -112,7 +110,6 @@ export default function LandingHomePage() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
-  const [authStoreName, setAuthStoreName] = useState("");
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [authError, setAuthError] = useState("");
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
@@ -377,7 +374,7 @@ export default function LandingHomePage() {
         </div>
       </section>
 
-      {/* 4. Interactive Category Bar (Redbubble Style) */}
+      {/* 4. Interactive Category Bar */}
       <section id="catalog" className="max-w-7xl mx-auto px-4 sm:px-6 pt-12">
         <div className="flex items-center gap-3 overflow-x-auto scrollbar-none pb-2">
           {MARKETPLACE_CATEGORIES.map((cat, idx) => {
@@ -500,7 +497,7 @@ export default function LandingHomePage() {
         </div>
       </section>
 
-      {/* 5. Comparison Table (Gumroad/Etsy vs Curiolot) */}
+      {/* 5. Comparison Table */}
       <section id="comparison" className="py-20 max-w-4xl mx-auto px-4 sm:px-6">
         <div className="text-center space-y-3 mb-10">
           <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-950">
