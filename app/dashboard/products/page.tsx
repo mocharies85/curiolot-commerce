@@ -24,7 +24,7 @@ export default function YourProductsPage() {
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  // Status Pro: otomatis aktif untuk akun Pro
+  // Pro status synchronized dynamically with central D1 settings
   const [isPro, setIsPro] = useState(true);
   const [showProUpgradeModal, setShowProUpgradeModal] = useState(false);
 
@@ -34,7 +34,7 @@ export default function YourProductsPage() {
       const data = await res.json();
       if (Array.isArray(data)) setProducts(data);
     } catch (err) {
-      console.error(err);
+      console.error("Failed to fetch products:", err);
     } finally {
       setIsLoading(false);
     }
@@ -42,20 +42,36 @@ export default function YourProductsPage() {
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+
+    // Fetch official plan status from central database settings
+    fetch(`/api/settings?username=${username}`)
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (data) {
+          if (typeof data.isPro !== "undefined") {
+            setIsPro(Boolean(data.isPro));
+          } else if (data.plan) {
+            setIsPro(data.plan === "pro");
+          } else if (typeof data.is_pro !== "undefined") {
+            setIsPro(Boolean(data.is_pro));
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load user plan settings:", err));
+  }, [username]);
 
   const handleEditClick = (item: Product) => {
     if (!isPro) {
       setShowProUpgradeModal(true);
       return;
     }
-    // Mengarahkan ke form edit produk membawa ID produk
+    // Route to edit form with target product ID
     router.push(`/dashboard/new?edit=${item.id}`);
   };
 
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
-    setProducts((prev) => prev.map((p) => p.id === id ? { ...p, isActive: nextStatus } : p));
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, isActive: nextStatus } : p)));
     await fetch("/api/products", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -81,7 +97,7 @@ export default function YourProductsPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -181,11 +197,11 @@ export default function YourProductsPage() {
                     </button>
                   </td>
                   
-                  {/* Kolom ACTIONS */}
+                  {/* Actions Column */}
                   <td className="py-4 px-6 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       
-                      {/* Tombol Edit Khusus Pro (Area Lingkaran Merah) */}
+                      {/* Pro-Exclusive Edit Button */}
                       <button
                         type="button"
                         onClick={() => handleEditClick(item)}
@@ -204,7 +220,7 @@ export default function YourProductsPage() {
                         )}
                       </button>
 
-                      {/* Tombol View Live Storefront */}
+                      {/* Live Storefront Link */}
                       <Link
                         href={`/${username}/${item.slug}`}
                         target="_blank"
@@ -214,7 +230,7 @@ export default function YourProductsPage() {
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
 
-                      {/* Tombol Delete */}
+                      {/* Delete Button */}
                       <button
                         type="button"
                         onClick={() => handleDelete(item.id, item.title)}
@@ -232,7 +248,7 @@ export default function YourProductsPage() {
         )}
       </div>
 
-      {/* Pop-up Modal Peringatan Khusus Akun Free */}
+      {/* Pro Plan Upgrade Modal (English) */}
       {showProUpgradeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5">
@@ -240,9 +256,9 @@ export default function YourProductsPage() {
               <Sparkles className="w-6 h-6 fill-amber-500" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Fitur Khusus Curiolot Pro</h3>
+              <h3 className="text-lg font-bold text-slate-900">Curiolot Pro Exclusive Feature</h3>
               <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                Mengubah harga produk yang sudah terbit, memperbarui file PDF/arsip vault, dan mengganti deskripsi merupakan fitur eksklusif untuk kreator <strong>Pro Plan</strong>.
+                Modifying published pricing, replacing secure vault archives, and updating descriptions are exclusive features reserved for <strong>Pro Plan</strong> creators.
               </p>
             </div>
             <div className="flex items-center gap-2 pt-2">
@@ -251,18 +267,17 @@ export default function YourProductsPage() {
                 onClick={() => setShowProUpgradeModal(false)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
               >
-                Nanti Saja
+                Maybe Later
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowProUpgradeModal(false);
-                  router.push("/dashboard/pricing");
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-md cursor-pointer"
+              <a
+                href="https://link.curiolot.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowProUpgradeModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-md cursor-pointer inline-flex items-center justify-center"
               >
-                Upgrade ke Pro
-              </button>
+                Upgrade to Pro
+              </a>
             </div>
           </div>
         </div>
