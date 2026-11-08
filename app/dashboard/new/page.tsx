@@ -287,7 +287,7 @@ export default function NewProductPage() {
         alert(editId ? "Product updated successfully!" : "Product published successfully!");
         router.push("/dashboard/products");
       } else {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData: any = await res.json().catch(() => ({}));
         alert(errorData.error || (editId ? "Failed to update product." : "Failed to publish product. Please check form inputs."));
       }
     } catch (err) {
