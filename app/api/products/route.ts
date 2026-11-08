@@ -55,7 +55,7 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Menerima dan menyimpan produk digital baru dari formulir dashboard
+// 2. POST: Menerima dan menyimpan produk digital baru ke Cloudflare D1
 export async function POST(req: Request) {
   try {
     const { env } = getRequestContext();
@@ -75,8 +75,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Judul produk wajib diisi." }, { status: 400 });
     }
 
-    const id = body.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `prod_${Date.now()}`);
     const username = body.username || "aries";
+
+    // Cari user_id dari tabel users untuk memenuhi syarat NOT NULL constraint
+    let userId = body.userId || body.user_id;
+    if (!userId) {
+      try {
+        const userRow: any = await db
+          .prepare("SELECT id FROM users WHERE username = ? LIMIT 1")
+          .bind(username)
+          .first();
+        userId = userRow?.id || username;
+      } catch {
+        userId = username;
+      }
+    }
+
+    const id = body.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `prod_${Date.now()}`);
     const title = body.title.trim();
     const slug = (body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "")).trim();
     const category = body.category || "E-Books & Guides";
@@ -105,9 +120,11 @@ export async function POST(req: Request) {
       console.warn("Gagal mengecek PRAGMA table_info, menggunakan fallback kolom default.");
     }
 
-    // Pasangkan kolom yang tersedia
+    // Pasangkan kolom yang tersedia (termasuk user_id)
     const candidateData: Record<string, any> = {
       id,
+      user_id: userId,
+      userId: userId,
       username,
       title,
       slug,
@@ -126,16 +143,16 @@ export async function POST(req: Request) {
       download_url: fileUrl,
       is_active: 1,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    // Filter hanya kolom yang benar-benar ada di tabel D1 Anda
+    // Filter kolom yang benar-benar ada di tabel D1 Anda
     let validKeys: string[] = [];
     if (colNames.size > 0) {
-      validKeys = Object.keys(candidateData).filter((k) => colNames.has(k));
+      validKeys = Object.keys(candidateData).filter((k) => colNames.has(k.toLowerCase()));
     } else {
-      // Fallback jika PRAGMA dinonaktifkan
       validKeys = [
-        "id", "username", "title", "slug", "category", "description", 
+        "id", "user_id", "username", "title", "slug", "category", "description", 
         "price", "original_price", "currency", "file_format", "file_size", 
         "cover_image_url", "badge", "payment_url", "is_active", "created_at"
       ];
