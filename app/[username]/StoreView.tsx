@@ -71,8 +71,8 @@ export default function StoreView({ username }: StoreViewProps) {
   useEffect(() => {
     async function loadStoreData() {
       try {
-        // 1. Read local storage cache for instant banner/logo sync
-        let localSettings: any = null;
+        // 1. Read local storage cache for instant banner/logo/branding sync
+        let localSettings: any = {};
         if (typeof window !== "undefined") {
           const keysToTry = [
             `curiolot_store_settings_${username}`,
@@ -80,6 +80,7 @@ export default function StoreView({ username }: StoreViewProps) {
             `store_settings_${username}`,
             "store_settings",
             "curiolot_store_customization",
+            "curiolot_store_branding",
           ];
           for (const key of keysToTry) {
             const stored = localStorage.getItem(key);
@@ -103,18 +104,22 @@ export default function StoreView({ username }: StoreViewProps) {
         const settingsData: any = await settingsRes.json().catch(() => ({}));
         const productsData: any = await productsRes.json().catch(() => []);
 
-        // Merge API data with local customization
+        // Merge API data with local customization without letting empty API values wipe local images
         const mergedSettings: any = {
-          ...(localSettings || {}),
-          ...(settingsData || {}),
+          ...localSettings,
+          ...settingsData,
         };
 
         if (localSettings) {
-          if (localSettings.logoUrl || localSettings.storeLogo || localSettings.logo) {
+          if (!settingsData.logoUrl && (localSettings.logoUrl || localSettings.storeLogo || localSettings.logo)) {
             mergedSettings.logoUrl = localSettings.logoUrl || localSettings.storeLogo || localSettings.logo;
           }
-          if (localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl) {
-            mergedSettings.heroImageUrl = localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl;
+          if (!settingsData.bannerUrl && (localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl)) {
+            mergedSettings.bannerUrl = localSettings.bannerUrl || localSettings.heroImageUrl || localSettings.bannerImageUrl;
+            mergedSettings.heroImageUrl = mergedSettings.bannerUrl;
+          }
+          if ((!settingsData.storeTitle || settingsData.storeTitle === "Digital Creator Studio") && (localSettings.storeTitle || localSettings.storeName)) {
+            mergedSettings.storeTitle = localSettings.storeTitle || localSettings.storeName;
           }
           if (localSettings.heroHeadline || localSettings.mainHeadline) {
             mergedSettings.heroTitle = localSettings.heroHeadline || localSettings.mainHeadline;
@@ -125,12 +130,6 @@ export default function StoreView({ username }: StoreViewProps) {
           if (localSettings.badgeTag || localSettings.heroBadge) {
             mergedSettings.heroBadge = localSettings.badgeTag || localSettings.heroBadge;
           }
-          if (typeof localSettings.showBundle !== "undefined") mergedSettings.showBundle = localSettings.showBundle;
-          if (typeof localSettings.showBundleCard !== "undefined") mergedSettings.showBundleCard = localSettings.showBundleCard;
-          if (typeof localSettings.isBundleActive !== "undefined") mergedSettings.isBundleActive = localSettings.isBundleActive;
-          if (typeof localSettings.showPromoStrip !== "undefined") mergedSettings.showPromoStrip = localSettings.showPromoStrip;
-          if (typeof localSettings.showDiscountCoupon !== "undefined") mergedSettings.showDiscountCoupon = localSettings.showDiscountCoupon;
-          if (typeof localSettings.isCouponActive !== "undefined") mergedSettings.isCouponActive = localSettings.isCouponActive;
         }
 
         setSettings(mergedSettings as StoreSettings);
@@ -289,16 +288,17 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.store_title || 
     (settings as any)?.storeName || 
     (settings as any)?.store_name || 
-    `${username} Store`;
+    "Aries Store";
 
   const heroBannerImage = 
     settings?.heroImageUrl || 
-    (settings as any)?.hero_image_url || 
     (settings as any)?.bannerUrl || 
+    (settings as any)?.hero_image_url || 
     (settings as any)?.banner_url || 
     (settings as any)?.bannerImageUrl || 
     (settings as any)?.banner_image_url || 
-    (settings as any)?.heroImage;
+    (settings as any)?.heroImage ||
+    (settings as any)?.banner;
 
   const heroHeadlineText = 
     settings?.heroTitle || 
@@ -307,69 +307,57 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.hero_headline || 
     (settings as any)?.mainHeadline || 
     (settings as any)?.headline || 
-    (settings as any)?.title;
+    "Premium Vectors & 3D Design Assets";
 
   const heroDescriptionText = 
     settings?.heroDescription || 
     (settings as any)?.hero_description || 
     (settings as any)?.subHeadline || 
     (settings as any)?.sub_headline || 
-    (settings as any)?.description;
+    "Supercharge your creative workflow with production-ready assets.";
 
   const heroBadgeText = 
     settings?.heroBadge || 
     (settings as any)?.hero_badge || 
     (settings as any)?.badgeTag || 
     (settings as any)?.badgeTagText || 
-    (settings as any)?.badge;
+    "Featured Release";
 
-  const isHeroVisible = 
-    (settings as any)?.showHero !== false && 
-    (settings as any)?.showHeroBanner !== false && 
-    (settings as any)?.bannerActive !== false && 
-    (settings as any)?.isHeroActive !== false;
+  // Robust visibility parser (supports both Active and Hidden toggling without locking)
+  const checkIsActive = (val: any, fallback = true) => {
+    if (val === undefined || val === null) return fallback;
+    if (val === true || val === 1 || val === "1" || val === "active" || val === "visible" || val === "true") return true;
+    if (val === false || val === 0 || val === "0" || val === "hidden" || val === "false") return false;
+    return fallback;
+  };
 
-  // Strict check for Hidden Bundle Offer Card
-  const isBundleHidden = 
-    (settings as any)?.showBundle === false ||
-    (settings as any)?.showBundle === 0 ||
-    (settings as any)?.showBundle === "hidden" ||
-    (settings as any)?.showBundleCard === false ||
-    (settings as any)?.showBundleCard === 0 ||
-    (settings as any)?.showBundleCard === "hidden" ||
-    (settings as any)?.isBundleActive === false ||
-    (settings as any)?.isBundleActive === 0 ||
-    (settings as any)?.isBundleActive === "hidden" ||
-    (settings as any)?.bundleActive === false ||
-    (settings as any)?.bundleActive === 0 ||
-    (settings as any)?.bundleStatus === "hidden" ||
-    (settings as any)?.bundleCardStatus === "hidden" ||
-    (settings as any)?.is_bundle_active === 0 ||
-    (settings as any)?.is_bundle_active === false;
+  const isHeroVisible = checkIsActive(
+    (settings as any)?.showHero ??
+    (settings as any)?.showHeroBanner ??
+    (settings as any)?.bannerActive ??
+    (settings as any)?.isHeroActive,
+    true
+  );
 
-  const showBundle = !isBundleHidden;
+  const showBundle = checkIsActive(
+    (settings as any)?.showBundle ??
+    (settings as any)?.showBundleCard ??
+    (settings as any)?.isBundleActive ??
+    (settings as any)?.bundleActive ??
+    (settings as any)?.bundleStatus,
+    true
+  );
 
-  // Strict check for Hidden Discount Coupon Strip
-  const isCouponHidden = 
-    (settings as any)?.showPromoStrip === false ||
-    (settings as any)?.showPromoStrip === 0 ||
-    (settings as any)?.showPromoStrip === "hidden" ||
-    (settings as any)?.showDiscountCoupon === false ||
-    (settings as any)?.showDiscountCoupon === 0 ||
-    (settings as any)?.showDiscountCoupon === "hidden" ||
-    (settings as any)?.isCouponActive === false ||
-    (settings as any)?.isCouponActive === 0 ||
-    (settings as any)?.isCouponActive === "hidden" ||
-    (settings as any)?.couponActive === false ||
-    (settings as any)?.couponActive === 0 ||
-    (settings as any)?.promoActive === false ||
-    (settings as any)?.promoActive === 0 ||
-    (settings as any)?.couponStatus === "hidden" ||
-    (settings as any)?.promoStatus === "hidden" ||
-    (settings as any)?.is_coupon_active === 0 ||
-    (settings as any)?.is_coupon_active === false;
-
-  const showPromoStrip = !isCouponHidden;
+  const showPromoStrip = checkIsActive(
+    (settings as any)?.showPromoStrip ??
+    (settings as any)?.showDiscountCoupon ??
+    (settings as any)?.isCouponActive ??
+    (settings as any)?.showPromo ??
+    (settings as any)?.promoActive ??
+    (settings as any)?.couponStatus ??
+    (settings as any)?.promoStatus,
+    true
+  );
 
   const showBadge = Boolean(heroBadgeText);
   const showTitle = Boolean(heroHeadlineText);
@@ -538,11 +526,11 @@ export default function StoreView({ username }: StoreViewProps) {
               src={heroBannerImage || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"}
               alt="Hero Visual"
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-                hasHeroText ? "opacity-45" : "opacity-100"
+                hasHeroText ? "opacity-60" : "opacity-100"
               }`}
             />
             {hasHeroText && (
-              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/60 to-transparent z-0" />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent z-0" />
             )}
             {hasHeroText && (
               <div className="relative z-10 p-8 sm:p-12 max-w-2xl space-y-4">
@@ -595,7 +583,7 @@ export default function StoreView({ username }: StoreViewProps) {
 
         <div className={`grid grid-cols-1 ${showBundle ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-8`}>
           
-          {/* Side Promo Card (Bundle Offer) - Strictly hidden when set to Hidden */}
+          {/* Side Promo Card (Bundle Offer) */}
           {showBundle && (
             <div className="lg:col-span-1 rounded-3xl bg-linear-to-b from-amber-500 to-amber-600 p-8 text-white flex flex-col justify-between shadow-lg relative overflow-hidden">
               <div className="relative z-10 space-y-4">
@@ -611,7 +599,7 @@ export default function StoreView({ username }: StoreViewProps) {
                 </h3>
 
                 <p className="text-amber-100 text-xs leading-relaxed">
-                  {settings?.bundleDescription || "Unlock instant access to the complete vector collection and 3D asset library in one discounted package."}
+                  {settings?.bundleDescription || "Unlock instant access to the complete digital asset library."}
                 </p>
 
                 <div className="pt-2">
@@ -736,7 +724,7 @@ export default function StoreView({ username }: StoreViewProps) {
         </div>
       </section>
 
-      {/* 5. Promotional Discount Strip - Strictly hidden when set to Hidden */}
+      {/* 5. Promotional Discount Strip */}
       {showPromoStrip && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 mt-16">
           <div className="bg-amber-400 rounded-3xl p-6 sm:p-8 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-sm">

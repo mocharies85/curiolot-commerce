@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Plus, 
   ShoppingBag, 
@@ -11,37 +12,55 @@ import {
   Trash2, 
   Eye, 
   EyeOff, 
-  Edit3,
+  Pencil,
+  ExternalLink,
   HardDrive,
   DownloadCloud
 } from "lucide-react";
 import type { Product } from "@/lib/products";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const username = "aries";
+
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPro, setIsPro] = useState(true);
 
-  // Ambil data produk terbaru dari server saat halaman dimuat
-  const fetchProducts = async () => {
+  // Fetch product inventory and user plan settings
+  const fetchDashboardData = async () => {
     try {
-      const res = await fetch(`/api/products?username=${username}`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setProducts(data);
+      const [productsRes, settingsRes] = await Promise.all([
+        fetch(`/api/products?username=${username}`),
+        fetch(`/api/settings?username=${username}`),
+      ]);
+
+      const productsData: any = await productsRes.json().catch(() => []);
+      const settingsData: any = await settingsRes.json().catch(() => ({}));
+
+      if (Array.isArray(productsData)) {
+        setProducts(productsData);
+      }
+
+      if (settingsData) {
+        if (typeof settingsData.isPro !== "undefined") {
+          setIsPro(Boolean(settingsData.isPro));
+        } else if (settingsData.plan) {
+          setIsPro(settingsData.plan === "pro");
+        }
       }
     } catch (err) {
-      console.error("Failed to load products:", err);
+      console.error("Failed to load dashboard data:", err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchDashboardData();
   }, []);
 
-  // Hapus produk secara permanen
+  // Permanently delete product record
   const handleDelete = async (id: string, title: string) => {
     if (!confirm(`Are you sure you want to permanently delete "${title}"?`)) return;
 
@@ -56,11 +75,11 @@ export default function DashboardPage() {
       });
     } catch (err) {
       console.error("Failed to delete product:", err);
-      fetchProducts(); // Rollback jika gagal
+      fetchDashboardData(); // Rollback on failure
     }
   };
 
-  // Toggle status visibility (Active / Hidden)
+  // Toggle product visibility status (Active / Hidden)
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
     setProducts((prev) =>
@@ -74,8 +93,8 @@ export default function DashboardPage() {
         body: JSON.stringify({ id, isActive: nextStatus }),
       });
     } catch (err) {
-      console.error("Failed to update status:", err);
-      fetchProducts();
+      console.error("Failed to update product visibility status:", err);
+      fetchDashboardData();
     }
   };
 
@@ -97,8 +116,14 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-              Mode: ★ Pro User
+            <span
+              className={`text-[11px] font-semibold px-3 py-1 rounded-full border ${
+                isPro
+                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                  : "bg-slate-100 text-slate-600 border-slate-200"
+              }`}
+            >
+              {isPro ? "Mode: ★ Pro User" : "Mode: Free Plan"}
             </span>
 
             <Link
@@ -121,7 +146,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">Products & Inventory</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              Manage your digital downloads, pricing, and visibility status.
+              Manage your digital downloads, pricing, licenses, and visibility status.
             </p>
           </div>
 
@@ -164,8 +189,12 @@ export default function DashboardPage() {
               <Sparkles className="w-4 h-4 text-amber-500" />
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-slate-900">Pro</span>
-              <span className="text-xs text-slate-400 font-medium">0% Platform Fee</span>
+              <span className="text-2xl font-extrabold text-slate-900">
+                {isPro ? "Pro" : "Free"}
+              </span>
+              <span className="text-xs text-slate-400 font-medium">
+                {isPro ? "0% Platform Fee" : "Standard Platform Fee"}
+              </span>
             </div>
           </div>
         </div>
@@ -188,7 +217,7 @@ export default function DashboardPage() {
               </div>
               <p className="text-sm font-bold text-slate-800">Your inventory is empty</p>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                All sample products have been removed. Click below to add your first real digital asset.
+                No products found. Click below to add your first digital asset.
               </p>
               <Link
                 href="/dashboard/new"
@@ -218,16 +247,16 @@ export default function DashboardPage() {
                         <img
                           src={p.coverUrl}
                           alt={p.title}
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-200/80 shrink-0"
+                          className="w-10 h-10 rounded-xl object-contain bg-black border border-slate-200/80 shrink-0"
                         />
                         <div>
                           <p className="font-bold text-slate-900">{p.title}</p>
-                          <p className="text-[11px] text-slate-400">store.curiolot.com/{username}/{p.slug}</p>
+                          <p className="text-[11px] text-slate-400">/{p.slug}</p>
                         </div>
                       </td>
                       <td className="py-4 px-6 text-slate-600 font-medium">{p.category}</td>
                       <td className="py-4 px-6 font-bold text-slate-900">
-                        {p.price === 0 ? "Free" : `$${p.price.toFixed(2)}`}
+                        {p.price === 0 ? "FREE" : `$${p.price.toFixed(2)}`}
                       </td>
                       <td className="py-4 px-6 text-slate-500">{p.downloads || 0} downloads</td>
                       <td className="py-4 px-6 text-center">
@@ -245,15 +274,27 @@ export default function DashboardPage() {
                         </button>
                       </td>
                       <td className="py-4 px-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Edit Product Action */}
+                          <Link
+                            href={`/dashboard/new?edit=${p.id}`}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                            title="Edit Product Details"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Link>
+
+                          {/* Preview Public Page */}
                           <Link
                             href={`/${username}/${p.slug}`}
                             target="_blank"
                             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
                             title="Preview Public Page"
                           >
-                            <ArrowUpRight className="w-3.5 h-3.5" />
+                            <ExternalLink className="w-3.5 h-3.5" />
                           </Link>
+
+                          {/* Delete Permanently */}
                           <button
                             type="button"
                             onClick={() => handleDelete(p.id, p.title)}
