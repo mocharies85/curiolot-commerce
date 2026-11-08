@@ -16,7 +16,9 @@ import {
   X, 
   FileCheck, 
   HardDrive, 
-  Eye 
+  Eye,
+  Save,
+  Loader2
 } from "lucide-react";
 import type { StoreSettings, PayoutProvider } from "@/lib/storeSettings";
 
@@ -27,7 +29,11 @@ export default function NewProductPage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Status paket akun: membaca database D1 secara otomatis (bukan toggle manual)
+  // Edit Mode States
+  const [editId, setEditId] = useState<string | null>(null);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(false);
+
+  // User Plan status: automatically synchronized from D1 Database
   const [isPro, setIsPro] = useState(true);
 
   // Form states
@@ -52,7 +58,7 @@ export default function NewProductPage() {
   const [showProModal, setShowProModal] = useState(false);
   const [attemptedFileSize, setAttemptedFileSize] = useState("");
 
-  // Centralized Payout Settings (Lengkap untuk 6 Gateway Global)
+  // Centralized Payout Settings (Universal 6 Gateway Routing)
   const [payoutProvider, setPayoutProvider] = useState<PayoutProvider>("paypal");
   const [paypalHandle, setPaypalHandle] = useState("curiolot");
   const [stripeUrl, setStripeUrl] = useState("");
@@ -66,8 +72,9 @@ export default function NewProductPage() {
   const FREE_MAX_SIZE_MB = 50;
   const PRO_MAX_SIZE_GB = 2;
 
-  // 1. Ambil pengaturan rekening dan status akun resmi dari database D1
+  // 1. Fetch Payout Configuration & Pre-load Existing Product Details on Edit
   useEffect(() => {
+    // Synchronize account plan & payout gateways
     fetch(`/api/settings?username=${username}`)
       .then((res) => res.json())
       .then((data: any) => {
@@ -80,7 +87,7 @@ export default function NewProductPage() {
           if (data.payoutKofiUrl) setKofiUrl(data.payoutKofiUrl);
           if (data.payoutCustomUrl) setCustomUrl(data.payoutCustomUrl);
 
-          // Sinkronisasi status akun Pro dari superadmin D1
+          // Pro status verified from central superadmin
           if (typeof data.isPro !== "undefined") {
             setIsPro(Boolean(data.isPro));
           } else if (data.plan) {
@@ -91,9 +98,49 @@ export default function NewProductPage() {
         }
       })
       .catch((err) => console.error("Failed to load payout settings:", err));
+
+    // Detect ?edit=prod_... parameter from URL
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const targetId = params.get("edit");
+      if (targetId) {
+        setEditId(targetId);
+        setIsLoadingProduct(true);
+
+        fetch(`/api/products?username=${username}`)
+          .then((res) => res.json())
+          .then((products: any) => {
+            if (Array.isArray(products)) {
+              const currentProduct = products.find((p: any) => p.id === targetId);
+              if (currentProduct) {
+                setTitle(currentProduct.title || "");
+                setSlug(currentProduct.slug || "");
+                setCategory(currentProduct.category || "E-Books & Guides");
+                setPrice(currentProduct.price !== undefined ? String(currentProduct.price) : "4.99");
+                setOriginalPrice(currentProduct.originalPrice ? String(currentProduct.originalPrice) : "");
+                setIsFree(currentProduct.price === 0);
+                setBadge(currentProduct.badge || "");
+                setCoverUrl(currentProduct.coverUrl || "");
+                setFileFormat(currentProduct.fileFormat || "PDF");
+                setProductFileSize(currentProduct.fileSize || "4.5 MB");
+                setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
+                setDescription(currentProduct.description || "");
+
+                if (currentProduct.whatsInside) {
+                  setFeatures(currentProduct.whatsInside);
+                } else if (Array.isArray(currentProduct.features)) {
+                  setFeatures(currentProduct.features.join("\n"));
+                }
+              }
+            }
+          })
+          .catch((err) => console.error("Failed to load product for editing:", err))
+          .finally(() => setIsLoadingProduct(false));
+      }
+    }
   }, [username]);
 
-  // 2. Tautan Pembayaran Terkunci Otomatis Sesuai Gateway Aktif
+  // 2. Auto-Locked Payment Destination URL
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -119,7 +166,7 @@ export default function NewProductPage() {
     }
   }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
 
-  // Label nama gateway aktif untuk ditampilkan di kotak info
+  // Active Gateway Label helper
   const getGatewayLabel = () => {
     switch (payoutProvider) {
       case "paypal": return "PayPal.Me Instant Payout";
@@ -132,16 +179,18 @@ export default function NewProductPage() {
     }
   };
 
-  // Auto-generate URL slug dari title
+  // Title change handler
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setTitle(val);
-    setSlug(
-      val
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-    );
+    if (!editId) {
+      setSlug(
+        val
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+      );
+    }
   };
 
   // Upload product cover mockup image
@@ -207,7 +256,7 @@ export default function NewProductPage() {
     setIsSubmitting(true);
 
     const productPayload = {
-      id: `prod_${Date.now()}`,
+      id: editId || `prod_${Date.now()}`,
       title,
       slug: slug || `product-${Date.now()}`,
       category,
@@ -218,36 +267,45 @@ export default function NewProductPage() {
       paymentUrl: autoLockedPaymentUrl,
       sellerCheckoutUrl: autoLockedPaymentUrl,
       fileFormat,
-      fileSize: productFileSize || "15.4 MB",
+      fileSize: productFileSize || "4.5 MB",
       license: "Standard Commercial License Included",
       description,
       features: features.split("\n").filter((f) => f.trim() !== ""),
-      downloads: 0,
-      isActive: true,
+      whatsInside: features,
       username,
-      createdAt: new Date().toISOString(),
     };
 
     try {
+      // Use PUT when editing an existing product, POST when creating a new one
       const res = await fetch("/api/products", {
-        method: "POST",
+        method: editId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(productPayload),
       });
 
       if (res.ok) {
-        alert("Product published successfully!");
+        alert(editId ? "Product updated successfully!" : "Product published successfully!");
         router.push("/dashboard/products");
       } else {
-        alert("Failed to publish product. Please check form inputs.");
+        const errorData = await res.json().catch(() => ({}));
+        alert(errorData.error || (editId ? "Failed to update product." : "Failed to publish product. Please check form inputs."));
       }
     } catch (err) {
       console.error("Failed to persist product:", err);
-      alert("An unexpected error occurred while publishing.");
+      alert("An unexpected error occurred while saving.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoadingProduct) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center gap-3 text-slate-500 font-sans">
+        <Loader2 className="w-6 h-6 animate-spin text-slate-900" />
+        <p className="text-xs font-semibold">Loading product data for editing...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-24 font-sans antialiased">
@@ -262,7 +320,7 @@ export default function NewProductPage() {
             <span>Cancel & Back</span>
           </Link>
 
-          {/* Area Kanan Atas: Terkunci Read-Only Sesuai Database */}
+          {/* Read-Only Plan Badge */}
           <div className="flex items-center gap-3">
             <div
               className={`text-[11px] font-semibold px-3.5 py-1.5 rounded-full border select-none ${
@@ -274,7 +332,9 @@ export default function NewProductPage() {
             >
               {isPro ? "★ Pro Plan Active (2 GB Vault)" : "Free Plan (50 MB Vault)"}
             </div>
-            <span className="text-xs text-slate-400 font-medium hidden sm:inline">New Digital Asset</span>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+              {editId ? "Editing Product" : "New Digital Asset"}
+            </span>
           </div>
         </div>
       </header>
@@ -282,9 +342,13 @@ export default function NewProductPage() {
       {/* 2. Main Form */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Create New Digital Product</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            {editId ? "Edit Digital Product" : "Create New Digital Product"}
+          </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Publish a new digital file, graphic resource, or e-book directly to your storefront.
+            {editId 
+              ? "Modify your pricing, description, cover image, or download assets."
+              : "Publish a new digital file, graphic resource, or e-book directly to your storefront."}
           </p>
         </div>
 
@@ -311,7 +375,7 @@ export default function NewProductPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  URL Slug (Auto-generated)
+                  URL Slug {editId ? "(Preserved)" : "(Auto-generated)"}
                 </label>
                 <div className="flex items-center rounded-xl border border-slate-200 bg-slate-100/70 px-4 py-2.5 text-xs text-slate-500">
                   <span>store.curiolot.com/{username}/</span>
@@ -420,7 +484,6 @@ export default function NewProductPage() {
                   </div>
                 </div>
 
-                {/* SINKRONISASI REKENING OTOMATIS */}
                 <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div className="flex items-center gap-2.5">
@@ -475,16 +538,12 @@ export default function NewProductPage() {
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">Digital Asset & Cover Artwork</h2>
 
             <div className="space-y-6">
-              
-              {/* Product Cover Mockup */}
               <div className="space-y-2">
                 <label className="block text-xs font-semibold text-slate-700">
                   Product Cover Mockup *
                 </label>
 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-                  
-                  {/* Kolom Kiri: Input URL & Upload */}
                   <div className="md:col-span-7 space-y-3">
                     <div className="relative">
                       <ImageIcon className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -517,7 +576,7 @@ export default function NewProductPage() {
                         <UploadCloud className="w-4 h-4 text-indigo-600" />
                       </div>
                       <p className="text-xs font-bold text-slate-800">
-                        {uploadCoverName ? `Selected: ${uploadCoverName}` : "Click to upload product cover image"}
+                        {uploadCoverName ? `Selected: ${uploadCoverName}` : (coverUrl ? "Click to replace current cover" : "Click to upload product cover image")}
                       </p>
                       <p className="text-[11px] text-slate-400">
                         Any dimensions supported (Portrait or Landscape will auto-center)
@@ -535,7 +594,6 @@ export default function NewProductPage() {
                     </div>
                   </div>
 
-                  {/* Kolom Kanan: Kotak Preview Mockup Produk (Frame 4:3) */}
                   <div className="md:col-span-5">
                     <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-3 space-y-2">
                       <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider px-1">
@@ -585,7 +643,6 @@ export default function NewProductPage() {
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
 
@@ -595,7 +652,6 @@ export default function NewProductPage() {
                   <label className="block text-xs font-semibold text-slate-700">
                     Upload Product File (ZIP, PDF, RAR, MP4, etc.) *
                   </label>
-
                   <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
                     isPro 
                       ? "bg-amber-50 text-amber-800 border-amber-200" 
@@ -719,15 +775,19 @@ export default function NewProductPage() {
               href="/dashboard/products"
               className="px-6 py-3 rounded-2xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
             >
-              Discard
+              Cancel
             </Link>
             <button
               type="submit"
               disabled={isSubmitting}
               className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 disabled:opacity-50 cursor-pointer flex items-center gap-2"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>{isSubmitting ? "Publishing Product..." : "Publish Product"}</span>
+              {editId ? <Save className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+              <span>
+                {isSubmitting 
+                  ? (editId ? "Updating Product..." : "Publishing Product...") 
+                  : (editId ? "Save Changes" : "Publish Product")}
+              </span>
             </button>
           </div>
 
