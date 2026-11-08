@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { 
   Plus, 
   Search, 
@@ -9,16 +10,23 @@ import {
   Trash2, 
   Eye, 
   EyeOff, 
-  Package
+  Package,
+  Pencil,
+  Sparkles
 } from "lucide-react";
 import type { Product } from "@/lib/products";
 
 export default function YourProductsPage() {
+  const router = useRouter();
   const username = "aries";
   const [products, setProducts] = useState<Product[]>([]);
   const [filterTab, setFilterTab] = useState<"all" | "active" | "hidden">("all");
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+
+  // Status Pro: otomatis aktif untuk akun Pro
+  const [isPro, setIsPro] = useState(true);
+  const [showProUpgradeModal, setShowProUpgradeModal] = useState(false);
 
   const fetchProducts = async () => {
     try {
@@ -35,6 +43,15 @@ export default function YourProductsPage() {
   useEffect(() => {
     fetchProducts();
   }, []);
+
+  const handleEditClick = (item: Product) => {
+    if (!isPro) {
+      setShowProUpgradeModal(true);
+      return;
+    }
+    // Mengarahkan ke form edit produk membawa ID produk
+    router.push(`/dashboard/new?edit=${item.id}`);
+  };
 
   const handleToggleStatus = async (id: string, currentStatus: boolean) => {
     const nextStatus = !currentStatus;
@@ -163,8 +180,31 @@ export default function YourProductsPage() {
                       <span>{item.isActive ? "Active" : "Hidden"}</span>
                     </button>
                   </td>
+                  
+                  {/* Kolom ACTIONS */}
                   <td className="py-4 px-6 text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1.5">
+                      
+                      {/* Tombol Edit Khusus Pro (Area Lingkaran Merah) */}
+                      <button
+                        type="button"
+                        onClick={() => handleEditClick(item)}
+                        className={`p-1.5 rounded-lg transition relative group cursor-pointer ${
+                          isPro 
+                            ? "text-slate-400 hover:text-slate-900 hover:bg-slate-100" 
+                            : "text-slate-300 hover:text-amber-600 hover:bg-amber-50"
+                        }`}
+                        title={isPro ? "Edit Product" : "Edit feature is exclusive to Pro creators"}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        {!isPro && (
+                          <span className="absolute -top-1 -right-1 bg-amber-500 text-slate-950 font-black text-[7px] px-1 rounded-xs shadow-xs flex items-center">
+                            PRO
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Tombol View Live Storefront */}
                       <Link
                         href={`/${username}/${item.slug}`}
                         target="_blank"
@@ -173,6 +213,8 @@ export default function YourProductsPage() {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
+
+                      {/* Tombol Delete */}
                       <button
                         type="button"
                         onClick={() => handleDelete(item.id, item.title)}
@@ -189,6 +231,42 @@ export default function YourProductsPage() {
           </table>
         )}
       </div>
+
+      {/* Pop-up Modal Peringatan Khusus Akun Free */}
+      {showProUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center mx-auto">
+              <Sparkles className="w-6 h-6 fill-amber-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Fitur Khusus Curiolot Pro</h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Mengubah harga produk yang sudah terbit, memperbarui file PDF/arsip vault, dan mengganti deskripsi merupakan fitur eksklusif untuk kreator <strong>Pro Plan</strong>.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowProUpgradeModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Nanti Saja
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowProUpgradeModal(false);
+                  router.push("/dashboard/pricing");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-md cursor-pointer"
+              >
+                Upgrade ke Pro
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
