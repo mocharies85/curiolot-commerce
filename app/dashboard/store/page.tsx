@@ -63,7 +63,22 @@ const compressImage = (file: File, maxWidth: number, maxHeight: number, quality 
 };
 
 export default function YourStorePage() {
-  const username = "aries";
+  // Ambil username secara dinamis dari session browser
+  const [username, setUsername] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const storedSession = localStorage.getItem("curiolot_session");
+      if (storedSession) {
+        try {
+          const parsed = JSON.parse(storedSession);
+          if (parsed?.username) return parsed.username.toLowerCase();
+          if (parsed?.name) return parsed.name.toLowerCase().replace(/\s+/g, "");
+          if (parsed?.email) return parsed.email.split("@")[0].toLowerCase();
+        } catch (e) {}
+      }
+    }
+    return "vanth";
+  });
+
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -72,12 +87,16 @@ export default function YourStorePage() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
 
-  // Bundle pricing state for automatic checkout lock
   const [bundlePrice, setBundlePrice] = useState("19.00");
 
+  const defaultStoreTitle = useMemo(() => {
+    if (!username) return "Creator Store";
+    return `${username.charAt(0).toUpperCase() + username.slice(1)} Store`;
+  }, [username]);
+
   const [settings, setSettings] = useState<StoreSettings>({
-    username: "aries",
-    storeTitle: "Aries Store",
+    username: "",
+    storeTitle: "",
     logoUrl: "",
     payoutProvider: "paypal",
     payoutPaypalHandle: "curiolot",
@@ -89,7 +108,7 @@ export default function YourStorePage() {
     showHero: true,
     heroBadge: "Featured Release",
     showHeroBadge: false,
-    heroTitle: "Premium Vectors & 3D Design Assets",
+    heroTitle: "Original Digital Assets & Creative Works",
     showHeroTitle: false,
     heroDescription: "Supercharge your creative workflow with production-ready assets.",
     showHeroDescription: false,
@@ -109,7 +128,8 @@ export default function YourStorePage() {
   });
 
   useEffect(() => {
-    // Read local cache first for instant UI response
+    if (!username) return;
+
     let localData: any = null;
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem(`curiolot_store_settings_${username}`);
@@ -130,7 +150,7 @@ export default function YourStorePage() {
           setSettings((prev) => ({ 
             ...prev, 
             ...data,
-            storeTitle: data.storeTitle || localData?.storeTitle || "Aries Store",
+            storeTitle: data.storeTitle || localData?.storeTitle || defaultStoreTitle,
             heroImageUrl: data.heroImageUrl || data.bannerUrl || localData?.heroImageUrl || DEFAULT_HERO_BANNER,
             logoUrl: data.logoUrl || localData?.logoUrl || "",
             bundleDownloadUrl: data.bundleDownloadUrl || localData?.bundleDownloadUrl || "",
@@ -141,9 +161,8 @@ export default function YourStorePage() {
         }
       })
       .catch((err) => console.error("Failed to load settings:", err));
-  }, [username]);
+  }, [username, defaultStoreTitle]);
 
-  // Synchronize bundle checkout link with active gateway from Earnings profile
   const autoLockedBundlePaymentUrl = useMemo(() => {
     if (settings.bundleUrl && !settings.bundleUrl.includes("buy.stripe.com/test_demo")) {
       return settings.bundleUrl;
@@ -188,12 +207,12 @@ export default function YourStorePage() {
   ]);
 
   const getInitials = (title: string) => {
-    if (!title) return "AS";
-    const words = title.trim().split(/\s+/);
+    const raw = (title || username || "CR").trim();
+    const words = raw.split(/\s+/);
     if (words.length >= 2) {
       return (words[0][0] + words[1][0]).toUpperCase();
     }
-    return title.slice(0, 2).toUpperCase();
+    return raw.slice(0, 2).toUpperCase();
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,7 +220,6 @@ export default function YourStorePage() {
     if (!file) return;
 
     try {
-      // Auto-compress logo to lightweight 256x256 image (~25 KB)
       const compressed = await compressImage(file, 256, 256, 0.85);
       setSettings((prev) => ({ ...prev, logoUrl: compressed }));
     } catch (err) {
@@ -215,7 +233,6 @@ export default function YourStorePage() {
 
     setUploadBannerName(file.name);
     try {
-      // Auto-compress banner to 1400x500 JPEG (~70 KB) to respect D1 statement limit
       const compressed = await compressImage(file, 1400, 500, 0.8);
       setSettings((prev) => ({ ...prev, heroImageUrl: compressed }));
     } catch (err) {
@@ -233,11 +250,13 @@ export default function YourStorePage() {
     e.preventDefault();
     setIsSaving(true);
 
+    const activeTitle = (settings.storeTitle || defaultStoreTitle).trim();
+
     const payloadToSave = {
       ...settings,
       username,
-      storeTitle: settings.storeTitle.trim() || "Aries Store",
-      storeName: settings.storeTitle.trim() || "Aries Store",
+      storeTitle: activeTitle,
+      storeName: activeTitle,
       bannerUrl: settings.heroImageUrl,
       heroImageUrl: settings.heroImageUrl,
       showHero: settings.showHero,
@@ -254,7 +273,6 @@ export default function YourStorePage() {
     };
 
     try {
-      // Use POST to guarantee D1 insertion and avoid 405 Method Not Allowed
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -266,10 +284,8 @@ export default function YourStorePage() {
         throw new Error(errorData.error || `Server responded with status ${res.status}`);
       }
 
-      // Synchronize directly to localStorage for instant local reflection
       if (typeof window !== "undefined") {
         localStorage.setItem(`curiolot_store_settings_${username}`, JSON.stringify(payloadToSave));
-        localStorage.setItem("curiolot_store_settings", JSON.stringify(payloadToSave));
       }
 
       setSaved(true);
@@ -289,6 +305,7 @@ export default function YourStorePage() {
     (settings.showHeroDescription && Boolean(settings.heroDescription));
 
   const isCustomBanner = settings.heroImageUrl !== DEFAULT_HERO_BANNER;
+  const currentTitle = settings.storeTitle || defaultStoreTitle;
 
   return (
     <div className="space-y-6">
@@ -331,9 +348,9 @@ export default function YourStorePage() {
               <input
                 type="text"
                 required
-                value={settings.storeTitle}
+                value={currentTitle}
                 onChange={(e) => setSettings({ ...settings, storeTitle: e.target.value })}
-                placeholder="e.g. Aries Store"
+                placeholder={`e.g. ${defaultStoreTitle}`}
                 className="w-full px-4 py-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 transition font-medium"
               />
             </div>
@@ -357,7 +374,7 @@ export default function YourStorePage() {
                     </div>
                   ) : (
                     <div className="w-14 h-14 rounded-xl bg-slate-900 text-white flex items-center justify-center font-extrabold text-base shadow-sm">
-                      {getInitials(settings.storeTitle)}
+                      {getInitials(currentTitle)}
                     </div>
                   )}
                 </div>
@@ -863,12 +880,12 @@ export default function YourStorePage() {
                     </div>
                   ) : (
                     <div className="w-7 h-7 rounded-lg bg-slate-900 text-white font-extrabold flex items-center justify-center text-[10px] shrink-0">
-                      {getInitials(settings.storeTitle)}
+                      {getInitials(currentTitle)}
                     </div>
                   )}
                   <div>
                     <p className="text-[11px] font-bold text-slate-900 truncate leading-tight max-w-[130px]">
-                      {settings.storeTitle}
+                      {currentTitle}
                     </p>
                     <p className="text-[8px] text-slate-400">Creator Storefront</p>
                   </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
@@ -23,7 +24,34 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const username = "aries";
+
+  // State pengguna dinamis berdasarkan sesi login aktif
+  const [currentUser, setCurrentUser] = useState({
+    name: "Creator",
+    username: "vanth",
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("curiolot_session");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          const resolvedUsername = 
+            parsed.username || 
+            (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "creator");
+          const resolvedName = 
+            parsed.name || 
+            resolvedUsername.charAt(0).toUpperCase() + resolvedUsername.slice(1);
+
+          setCurrentUser({
+            name: resolvedName,
+            username: resolvedUsername,
+          });
+        } catch (e) {}
+      }
+    }
+  }, []);
 
   // Sidebar navigation menu items
   const NAV_ITEMS = [
@@ -35,6 +63,13 @@ export default function DashboardLayout({
     { label: "Sales Channels", href: "/dashboard/channels", icon: Share2 },
     { label: "Earnings & Payout", href: "/dashboard/earnings", icon: DollarSign },
   ];
+
+  const initials = (currentUser.name || currentUser.username || "CR")
+    .split(/\s+/)
+    .map((w: string) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex font-sans antialiased">
@@ -90,7 +125,7 @@ export default function DashboardLayout({
         {/* Sidebar Footer: Storefront Link & Account Profile */}
         <div className="p-4 border-t border-slate-100 space-y-3">
           <Link
-            href={`/${username}`}
+            href={`/${currentUser.username}`}
             target="_blank"
             className="w-full py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-semibold flex items-center justify-between transition"
           >
@@ -99,12 +134,12 @@ export default function DashboardLayout({
           </Link>
 
           <div className="flex items-center gap-3 px-2 pt-1">
-            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">
-              {username.slice(0, 2).toUpperCase()}
+            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shrink-0">
+              {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-slate-900 truncate">Moch Aries</p>
-              <p className="text-[10px] text-slate-400 truncate">store.curiolot.com/{username}</p>
+              <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
+              <p className="text-[10px] text-slate-400 truncate">store.curiolot.com/{currentUser.username}</p>
             </div>
           </div>
         </div>
