@@ -1,5 +1,7 @@
 "use client";
 
+export const runtime = "edge";
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { 
@@ -15,6 +17,7 @@ import {
   Flame,
   Clock
 } from "lucide-react";
+import CuriolotLogo from "@/components/CuriolotLogo";
 
 interface ProductItem {
   id: string;
@@ -136,7 +139,7 @@ export default function DiscoverMarketplacePage() {
 
   // Fetch live products from user creation API
   useEffect(() => {
-    fetch("/api/products")
+    fetch("/api/products?all=true")
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -189,19 +192,15 @@ export default function DiscoverMarketplacePage() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans pb-24 antialiased">
       
       {/* Top Global Navigation Bar */}
-      <nav className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-sm">
-                C
-              </div>
-              <span className="font-extrabold tracking-tight text-slate-900 text-lg">
-                curiolot <span className="text-indigo-600 font-medium text-xs">market</span>
-              </span>
+      <nav className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="flex items-center gap-3">
+              <CuriolotLogo size="md" variant="dark" />
             </Link>
 
-            <span className="hidden md:inline-block text-xs font-semibold text-slate-400 border-l border-slate-200 pl-4">
+            <span className="hidden md:inline-block h-4 w-px bg-slate-200" />
+            <span className="hidden md:inline-block text-xs font-semibold text-slate-400">
               Global Creator Discovery
             </span>
           </div>
@@ -224,7 +223,7 @@ export default function DiscoverMarketplacePage() {
         </div>
       </nav>
 
-      {/* Hero Showcase Billboard Header (Redbubble/Gumroad style) */}
+      {/* Hero Showcase Billboard Header */}
       <section className="bg-linear-to-b from-slate-900 to-slate-950 text-white py-14 px-4 sm:px-6 text-center relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
         
@@ -289,7 +288,7 @@ export default function DiscoverMarketplacePage() {
             ))}
           </div>
 
-          {/* Sort Filter Dropdown / Tabs */}
+          {/* Sort Filter Dropdown */}
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
               <SlidersHorizontal className="w-3.5 h-3.5" /> Sort:
@@ -318,7 +317,7 @@ export default function DiscoverMarketplacePage() {
           )}
         </div>
 
-        {/* Product Grid Showcase (Gumroad/Redbubble Layout) */}
+        {/* Product Grid Showcase */}
         {filteredProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredProducts.map((product) => (
