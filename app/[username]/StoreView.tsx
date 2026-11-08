@@ -71,16 +71,12 @@ export default function StoreView({ username }: StoreViewProps) {
   useEffect(() => {
     async function loadStoreData() {
       try {
-        // 1. Read local storage cache for instant banner/logo/branding sync
+        // 1. Hanya baca local storage cache jika secara spesifik milik username ini
         let localSettings: any = {};
         if (typeof window !== "undefined") {
           const keysToTry = [
             `curiolot_store_settings_${username}`,
-            "curiolot_store_settings",
             `store_settings_${username}`,
-            "store_settings",
-            "curiolot_store_customization",
-            "curiolot_store_branding",
           ];
           for (const key of keysToTry) {
             const stored = localStorage.getItem(key);
@@ -104,7 +100,7 @@ export default function StoreView({ username }: StoreViewProps) {
         const settingsData: any = await settingsRes.json().catch(() => ({}));
         const productsData: any = await productsRes.json().catch(() => []);
 
-        // Merge API data with local customization without letting empty API values wipe local images
+        // Gabungkan pengaturan API dengan local customization khusus user ini
         const mergedSettings: any = {
           ...localSettings,
           ...settingsData,
@@ -228,8 +224,8 @@ export default function StoreView({ username }: StoreViewProps) {
   };
 
   const getInitials = (title?: string) => {
-    const raw = title || username;
-    const words = raw.trim().split(/\s+/);
+    const raw = (title || username || "CR").trim();
+    const words = raw.split(/\s+/);
     if (words.length >= 2) {
       return (words[0][0] + words[1][0]).toUpperCase();
     }
@@ -274,7 +270,12 @@ export default function StoreView({ username }: StoreViewProps) {
     });
   }, [products, selectedCategory, searchQuery]);
 
-  // Robust field normalization
+  // Robust field normalization dengan fallback dinamis sesuai username
+  const formattedUsername = username 
+    ? username.charAt(0).toUpperCase() + username.slice(1) 
+    : "Creator";
+  const defaultStoreName = `${formattedUsername} Store`;
+
   const storeLogo = 
     settings?.logoUrl || 
     (settings as any)?.logo_url || 
@@ -288,7 +289,7 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.store_title || 
     (settings as any)?.storeName || 
     (settings as any)?.store_name || 
-    "Aries Store";
+    defaultStoreName;
 
   const heroBannerImage = 
     settings?.heroImageUrl || 
@@ -307,7 +308,7 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.hero_headline || 
     (settings as any)?.mainHeadline || 
     (settings as any)?.headline || 
-    "Premium Vectors & 3D Design Assets";
+    "Original Digital Assets & Creative Works";
 
   const heroDescriptionText = 
     settings?.heroDescription || 
@@ -323,7 +324,7 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.badgeTagText || 
     "Featured Release";
 
-  // Robust visibility parser (supports both Active and Hidden toggling without locking)
+  // Robust visibility parser
   const checkIsActive = (val: any, fallback = true) => {
     if (val === undefined || val === null) return fallback;
     if (val === true || val === 1 || val === "1" || val === "active" || val === "visible" || val === "true") return true;
