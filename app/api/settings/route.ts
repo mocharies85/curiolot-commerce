@@ -3,6 +3,12 @@ import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
+// Helper: Format username menjadi nama toko default (contoh: 'vanth' -> 'Vanth Store')
+function getDefaultStoreTitle(username: string): string {
+  if (!username) return "Creator Store";
+  return `${username.charAt(0).toUpperCase() + username.slice(1)} Store`;
+}
+
 // Helper: Ensure store_settings table and all required columns exist in D1
 async function ensureStoreSettingsTable(db: any) {
   try {
@@ -110,6 +116,7 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const username = searchParams.get("username") || "aries";
+    const defaultTitle = getDefaultStoreTitle(username);
 
     const { env } = getRequestContext();
     const db = (env as any).DB;
@@ -117,8 +124,8 @@ export async function GET(req: Request) {
     if (!db) {
       return NextResponse.json({
         username,
-        storeTitle: "Aries Store",
-        storeName: "Aries Store",
+        storeTitle: defaultTitle,
+        storeName: defaultTitle,
         payoutProvider: "paypal",
         payoutPaypalHandle: "curiolot",
         paypalHandle: "curiolot",
@@ -152,7 +159,8 @@ export async function GET(req: Request) {
       "curiolot";
     const cleanPaypalHandle = (!rawHandle || rawHandle === "aries") ? "curiolot" : rawHandle;
 
-    const storeTitle = settingsRow?.store_title || "Aries Store";
+    // Gunakan judul dari database jika ada, jika belum ada gunakan format dinamis username
+    const storeTitle = settingsRow?.store_title || defaultTitle;
     const showHero = settingsRow ? Boolean(settingsRow.show_hero) : true;
     const showBundle = settingsRow ? Boolean(settingsRow.show_bundle) : true;
     const showPromo = settingsRow ? Boolean(settingsRow.show_promo) : true;
@@ -173,8 +181,8 @@ export async function GET(req: Request) {
       // Hero Showcase Typography & Visibility
       heroBadge: settingsRow?.hero_badge || "Featured Release",
       badgeTag: settingsRow?.hero_badge || "Featured Release",
-      heroTitle: settingsRow?.hero_title || "Premium Vectors & 3D Design Assets",
-      mainHeadline: settingsRow?.hero_title || "Premium Vectors & 3D Design Assets",
+      heroTitle: settingsRow?.hero_title || "Original Digital Assets & Creative Works",
+      mainHeadline: settingsRow?.hero_title || "Original Digital Assets & Creative Works",
       heroDescription: settingsRow?.hero_description || "Supercharge your creative workflow with production-ready assets.",
       subHeadline: settingsRow?.hero_description || "Supercharge your creative workflow with production-ready assets.",
       showHero,
@@ -191,7 +199,7 @@ export async function GET(req: Request) {
       // Bundle Details
       bundleBadge: settingsRow?.bundle_badge || "Bundle Offer",
       bundleTitle: settingsRow?.bundle_title || "Save Up to 60% on All Graphic Bundles",
-      bundleDescription: settingsRow?.bundle_description || "Unlock instant access to the complete vector collection and 3D asset library.",
+      bundleDescription: settingsRow?.bundle_description || "Unlock instant access to the complete digital asset library.",
       bundleUrl: settingsRow?.bundle_url || "#",
       bundleButtonText: settingsRow?.bundle_btn_text || "Get Complete Bundle",
 
@@ -227,6 +235,7 @@ export async function POST(req: Request) {
     await ensureStoreSettingsTable(db);
     const body: any = await req.json();
     const username = body.username || "aries";
+    const defaultTitle = getDefaultStoreTitle(username);
 
     // Retrieve existing record to retain unchanged values
     const existing: any = await db
@@ -240,7 +249,7 @@ export async function POST(req: Request) {
       body.storeName ||
       body.title ||
       existing?.store_title ||
-      "Aries Store"
+      defaultTitle
     ).trim();
 
     // Safeguard base64 size to prevent D1 1MB SQLITE_TOOBIG statement crash
@@ -261,7 +270,7 @@ export async function POST(req: Request) {
     }
 
     const heroBadge = body.heroBadge || body.badgeTag || existing?.hero_badge || "Featured Release";
-    const heroTitle = body.heroTitle || body.mainHeadline || existing?.hero_title || "Premium Vectors & 3D Design Assets";
+    const heroTitle = body.heroTitle || body.mainHeadline || existing?.hero_title || "Original Digital Assets & Creative Works";
     const heroDescription = body.heroDescription || body.subHeadline || existing?.hero_description || "";
 
     // Resolve visibility states with multi-source fallback
