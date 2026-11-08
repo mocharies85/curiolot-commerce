@@ -58,7 +58,7 @@ export default function NewProductPage() {
   const [showProModal, setShowProModal] = useState(false);
   const [attemptedFileSize, setAttemptedFileSize] = useState("");
 
-  // Centralized Payout Settings (Universal 6 Gateway Routing)
+  // Centralized Payout Settings (Defaults strictly to curiolot)
   const [payoutProvider, setPayoutProvider] = useState<PayoutProvider>("paypal");
   const [paypalHandle, setPaypalHandle] = useState("curiolot");
   const [stripeUrl, setStripeUrl] = useState("");
@@ -74,13 +74,31 @@ export default function NewProductPage() {
 
   // 1. Fetch Payout Configuration & Pre-load Existing Product Details on Edit
   useEffect(() => {
+    // Check local storage first for persisted handle
+    if (typeof window !== "undefined") {
+      const savedLocalHandle = localStorage.getItem("curiolot_paypal_handle");
+      if (savedLocalHandle && savedLocalHandle !== "aries") {
+        setPaypalHandle(savedLocalHandle);
+      }
+    }
+
     // Synchronize account plan & payout gateways
     fetch(`/api/settings?username=${username}`)
       .then((res) => res.json())
       .then((data: any) => {
         if (data) {
           if (data.payoutProvider) setPayoutProvider(data.payoutProvider);
-          if (data.payoutPaypalHandle) setPaypalHandle(data.payoutPaypalHandle);
+          
+          const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.paypal_handle;
+          if (rawHandle && rawHandle !== "aries") {
+            setPaypalHandle(rawHandle);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("curiolot_paypal_handle", rawHandle);
+            }
+          } else {
+            setPaypalHandle("curiolot");
+          }
+
           if (data.payoutStripeUrl) setStripeUrl(data.payoutStripeUrl);
           if (data.payoutLemonSqueezyUrl) setLemonSqueezyUrl(data.payoutLemonSqueezyUrl);
           if (data.payoutPaddleUrl) setPaddleUrl(data.payoutPaddleUrl);
@@ -126,10 +144,23 @@ export default function NewProductPage() {
                 setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
                 setDescription(currentProduct.description || "");
 
-                if (currentProduct.whatsInside) {
-                  setFeatures(currentProduct.whatsInside);
-                } else if (Array.isArray(currentProduct.features)) {
-                  setFeatures(currentProduct.features.join("\n"));
+                // Robust parsing for What's Inside multiline text
+                const rawInside = currentProduct.whatsInside ?? currentProduct.whats_inside ?? currentProduct.features;
+                if (typeof rawInside === "string") {
+                  try {
+                    const parsed = JSON.parse(rawInside);
+                    if (Array.isArray(parsed)) {
+                      setFeatures(parsed.join("\n"));
+                    } else {
+                      setFeatures(rawInside);
+                    }
+                  } catch {
+                    setFeatures(rawInside);
+                  }
+                } else if (Array.isArray(rawInside)) {
+                  setFeatures(rawInside.join("\n"));
+                } else {
+                  setFeatures("");
                 }
               }
             }
@@ -140,7 +171,7 @@ export default function NewProductPage() {
     }
   }, [username]);
 
-  // 2. Auto-Locked Payment Destination URL
+  // 2. Auto-Locked Payment Destination URL (Guaranteed curiolot, never aries)
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -158,9 +189,16 @@ export default function NewProductPage() {
         return customUrl || "#";
       case "paypal":
       default: {
-        const cleanHandle = paypalHandle
+        let cleanHandle = (paypalHandle || "")
           .replace(/^https?:\/\/paypal\.me\//i, "")
-          .replace(/\/.*$/, "") || "curiolot";
+          .replace(/\/.*$/, "")
+          .trim();
+
+        // Enforce curiolot if handle is empty or fell back to username aries
+        if (!cleanHandle || cleanHandle === "aries") {
+          cleanHandle = "curiolot";
+        }
+
         return `https://paypal.me/${cleanHandle}/${numericPrice.toFixed(2)}USD`;
       }
     }
@@ -272,11 +310,11 @@ export default function NewProductPage() {
       description,
       features: features.split("\n").filter((f) => f.trim() !== ""),
       whatsInside: features,
+      whats_inside: features,
       username,
     };
 
     try {
-      // Use PUT when editing an existing product, POST when creating a new one
       const res = await fetch("/api/products", {
         method: editId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
