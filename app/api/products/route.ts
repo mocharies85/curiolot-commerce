@@ -3,6 +3,26 @@ import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
+// Helper: Ensure crucial columns exist in D1 store_products table
+async function ensureRequiredColumns(db: any, colNames: Set<string>) {
+  if (colNames.size > 0 && !colNames.has("whats_inside")) {
+    try {
+      await db.prepare("ALTER TABLE store_products ADD COLUMN whats_inside TEXT").run();
+      colNames.add("whats_inside");
+    } catch {
+      // Column might already exist or ALTER is restricted
+    }
+  }
+  if (colNames.size > 0 && !colNames.has("updated_at")) {
+    try {
+      await db.prepare("ALTER TABLE store_products ADD COLUMN updated_at TEXT").run();
+      colNames.add("updated_at");
+    } catch {
+      // Ignore fallback
+    }
+  }
+}
+
 // 1. GET: Fetch product catalog for storefront and dashboard
 export async function GET(req: Request) {
   try {
@@ -28,24 +48,29 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
-    const formattedProducts = results.map((row: any) => ({
-      id: row.id,
-      title: row.title,
-      slug: row.slug,
-      category: row.category,
-      description: row.description || "",
-      price: Number(row.price) || 0,
-      originalPrice: row.original_price ? Number(row.original_price) : undefined,
-      currency: row.currency || "USD",
-      fileFormat: row.file_format,
-      fileSize: row.file_size,
-      coverUrl: row.cover_image_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
-      badge: row.badge || undefined,
-      paymentUrl: row.payment_url || undefined,
-      whatsInside: row.whats_inside || undefined,
-      fileUrl: row.file_url || row.download_url || undefined,
-      isActive: Boolean(row.is_active === 1 || row.is_active === true),
-    }));
+    const formattedProducts = results.map((row: any) => {
+      const insideText = row.whats_inside || row.features || "";
+      return {
+        id: row.id,
+        title: row.title,
+        slug: row.slug,
+        category: row.category,
+        description: row.description || "",
+        price: Number(row.price) || 0,
+        originalPrice: row.original_price ? Number(row.original_price) : undefined,
+        currency: row.currency || "USD",
+        fileFormat: row.file_format,
+        fileSize: row.file_size,
+        coverUrl: row.cover_image_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+        badge: row.badge || undefined,
+        paymentUrl: row.payment_url || undefined,
+        whatsInside: insideText,
+        whats_inside: insideText,
+        features: insideText ? insideText.split("\n").filter((item: string) => item.trim() !== "") : [],
+        fileUrl: row.file_url || row.download_url || undefined,
+        isActive: Boolean(row.is_active === 1 || row.is_active === true),
+      };
+    });
 
     return NextResponse.json(formattedProducts);
   } catch (err: any) {
@@ -102,11 +127,17 @@ export async function POST(req: Request) {
     const coverImageUrl = body.coverUrl || body.coverImageUrl || body.cover_image_url || "";
     const badge = body.badge || null;
     const paymentUrl = body.paymentUrl || body.payment_url || null;
+
+    // Resolve multiline What's Inside content
     const whatsInside = typeof body.whatsInside === "string" 
       ? body.whatsInside 
-      : (Array.isArray(body.features) ? body.features.join("\n") : (body.whats_inside || null));
+      : (typeof body.whats_inside === "string" 
+          ? body.whats_inside 
+          : (Array.isArray(body.features) ? body.features.join("\n") : null));
+
     const fileUrl = body.fileUrl || body.downloadUrl || body.file_url || null;
 
+    // Detect and dynamically adapt to D1 table columns
     let colNames = new Set<string>();
     try {
       const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
@@ -114,8 +145,10 @@ export async function POST(req: Request) {
         colNames = new Set(tableCols.map((c: any) => c.name.toLowerCase()));
       }
     } catch (e) {
-      console.warn("PRAGMA fallback active");
+      console.warn("PRAGMA fallback active for POST");
     }
+
+    await ensureRequiredColumns(db, colNames);
 
     const candidateData: Record<string, any> = {
       id,
@@ -135,6 +168,7 @@ export async function POST(req: Request) {
       badge,
       payment_url: paymentUrl,
       whats_inside: whatsInside,
+      features: whatsInside,
       file_url: fileUrl,
       download_url: fileUrl,
       is_active: 1,
@@ -198,17 +232,23 @@ export async function PUT(req: Request) {
     const category = body.category || "E-Books & Guides";
     const description = body.description || "";
     const price = Number(body.price) || 0;
-    const originalPrice = body.originalPrice ? Number(body.originalPrice) : (body.original_price ? Number(body.original_price) : null);
+    const originalPrice = body.originalPrice !== undefined && body.originalPrice !== null && body.originalPrice !== ""
+      ? Number(body.originalPrice)
+      : (body.original_price ? Number(body.original_price) : null);
     const fileFormat = body.fileFormat || body.file_format || "PDF";
     const fileSize = body.fileSize || body.file_size || "4.5 MB";
     const coverImageUrl = body.coverUrl || body.coverImageUrl || body.cover_image_url || "";
     const badge = body.badge || null;
     const paymentUrl = body.paymentUrl || body.payment_url || null;
+
+    // Resolve multiline What's Inside content
     const whatsInside = typeof body.whatsInside === "string" 
       ? body.whatsInside 
-      : (Array.isArray(body.features) ? body.features.join("\n") : (body.whats_inside || null));
+      : (typeof body.whats_inside === "string" 
+          ? body.whats_inside 
+          : (Array.isArray(body.features) ? body.features.join("\n") : null));
 
-    // Check available columns in D1
+    // Detect and dynamically adapt to D1 table columns
     let colNames = new Set<string>();
     try {
       const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
@@ -218,6 +258,8 @@ export async function PUT(req: Request) {
     } catch (e) {
       console.warn("PRAGMA fallback active for PUT");
     }
+
+    await ensureRequiredColumns(db, colNames);
 
     const candidateUpdates: Record<string, any> = {
       title,
@@ -232,15 +274,21 @@ export async function PUT(req: Request) {
       badge,
       payment_url: paymentUrl,
       whats_inside: whatsInside,
+      features: whatsInside,
     };
 
     if (colNames.has("updated_at")) {
       candidateUpdates.updated_at = new Date().toISOString();
     }
 
-    let validKeys = Object.keys(candidateUpdates);
+    let validKeys: string[] = [];
     if (colNames.size > 0) {
-      validKeys = validKeys.filter((k) => colNames.has(k.toLowerCase()));
+      validKeys = Object.keys(candidateUpdates).filter((k) => colNames.has(k.toLowerCase()));
+    } else {
+      validKeys = [
+        "title", "slug", "category", "description", "price", "original_price", 
+        "file_format", "file_size", "cover_image_url", "badge", "payment_url", "whats_inside"
+      ];
     }
 
     const setClauses = validKeys.map((k) => `${k} = ?`).join(", ");
@@ -284,7 +332,7 @@ export async function PATCH(req: Request) {
       .bind(body.isActive ? 1 : 0, body.id)
       .run();
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: "Status updated successfully" });
   } catch (err: any) {
     console.error("Failed to patch product status:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -311,7 +359,7 @@ export async function DELETE(req: Request) {
       .bind(body.id)
       .run();
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: "Product deleted successfully" });
   } catch (err: any) {
     console.error("Failed to delete product:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
