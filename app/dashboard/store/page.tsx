@@ -262,7 +262,7 @@ export default function YourStorePage() {
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
+        const errorData: any = await res.json().catch(() => ({}));
         throw new Error(errorData.error || `Server responded with status ${res.status}`);
       }
 
