@@ -3,7 +3,7 @@ import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
-// 1. GET: Mengambil daftar produk aktif untuk etalase toko
+// 1. GET: Fetch product catalog for storefront and dashboard
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -13,14 +13,13 @@ export async function GET(req: Request) {
     const db = (env as any).DB;
 
     if (!db) {
-      console.warn("D1 Database binding 'DB' tidak terdeteksi.");
+      console.warn("D1 Database binding 'DB' not detected.");
       return NextResponse.json([]);
     }
 
-    // Query ke tabel store_products di biolink-db
     const { results } = await db
       .prepare(
-        "SELECT * FROM store_products WHERE username = ? AND is_active = 1 ORDER BY created_at DESC"
+        "SELECT * FROM store_products WHERE username = ? ORDER BY created_at DESC"
       )
       .bind(username)
       .all();
@@ -29,7 +28,6 @@ export async function GET(req: Request) {
       return NextResponse.json([]);
     }
 
-    // Mapping nama kolom database ke nama properti yang dibaca oleh StoreView
     const formattedProducts = results.map((row: any) => ({
       id: row.id,
       title: row.title,
@@ -46,16 +44,17 @@ export async function GET(req: Request) {
       paymentUrl: row.payment_url || undefined,
       whatsInside: row.whats_inside || undefined,
       fileUrl: row.file_url || row.download_url || undefined,
+      isActive: Boolean(row.is_active === 1 || row.is_active === true),
     }));
 
     return NextResponse.json(formattedProducts);
   } catch (err: any) {
-    console.error("Gagal mengambil data produk D1:", err);
+    console.error("Failed to fetch products from D1:", err);
     return NextResponse.json({ error: err.message || "Internal Server Error" }, { status: 500 });
   }
 }
 
-// 2. POST: Menerima dan menyimpan produk digital baru ke Cloudflare D1
+// 2. POST: Create a new digital product
 export async function POST(req: Request) {
   try {
     const { env } = getRequestContext();
@@ -63,21 +62,20 @@ export async function POST(req: Request) {
 
     if (!db) {
       return NextResponse.json(
-        { error: "D1 Database binding 'DB' tidak ditemukan di Cloudflare environment." },
+        { error: "D1 Database binding 'DB' not found." },
         { status: 500 }
       );
     }
 
     const body: any = await req.json();
 
-    // Validasi data penting
     if (!body.title) {
-      return NextResponse.json({ error: "Judul produk wajib diisi." }, { status: 400 });
+      return NextResponse.json({ error: "Product title is required." }, { status: 400 });
     }
 
     const username = body.username || "aries";
 
-    // Cari user_id dari tabel users untuk memenuhi syarat NOT NULL constraint
+    // Satisfy user_id NOT NULL constraint
     let userId = body.userId || body.user_id;
     if (!userId) {
       try {
@@ -106,10 +104,9 @@ export async function POST(req: Request) {
     const paymentUrl = body.paymentUrl || body.payment_url || null;
     const whatsInside = typeof body.whatsInside === "string" 
       ? body.whatsInside 
-      : (Array.isArray(body.whatsInside) ? body.whatsInside.join("\n") : (body.whats_inside || null));
+      : (Array.isArray(body.features) ? body.features.join("\n") : (body.whats_inside || null));
     const fileUrl = body.fileUrl || body.downloadUrl || body.file_url || null;
 
-    // Cek skema kolom tabel store_products agar query INSERT adaptif
     let colNames = new Set<string>();
     try {
       const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
@@ -117,10 +114,9 @@ export async function POST(req: Request) {
         colNames = new Set(tableCols.map((c: any) => c.name.toLowerCase()));
       }
     } catch (e) {
-      console.warn("Gagal mengecek PRAGMA table_info, menggunakan fallback kolom default.");
+      console.warn("PRAGMA fallback active");
     }
 
-    // Pasangkan kolom yang tersedia (termasuk user_id)
     const candidateData: Record<string, any> = {
       id,
       user_id: userId,
@@ -146,7 +142,6 @@ export async function POST(req: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    // Filter kolom yang benar-benar ada di tabel D1 Anda
     let validKeys: string[] = [];
     if (colNames.size > 0) {
       validKeys = Object.keys(candidateData).filter((k) => colNames.has(k.toLowerCase()));
@@ -171,10 +166,154 @@ export async function POST(req: Request) {
     }, { status: 201 });
 
   } catch (err: any) {
-    console.error("Gagal menyimpan produk ke D1:", err);
+    console.error("Failed to insert product into D1:", err);
     return NextResponse.json(
-      { error: err.message || "Gagal memproses penyimpanan produk" },
+      { error: err.message || "Failed to publish product" },
       { status: 500 }
     );
+  }
+}
+
+// 3. PUT: Update an existing product (Edit Mode)
+export async function PUT(req: Request) {
+  try {
+    const { env } = getRequestContext();
+    const db = (env as any).DB;
+
+    if (!db) {
+      return NextResponse.json(
+        { error: "D1 Database binding 'DB' not found." },
+        { status: 500 }
+      );
+    }
+
+    const body: any = await req.json();
+
+    if (!body.id) {
+      return NextResponse.json({ error: "Product ID is required for updating." }, { status: 400 });
+    }
+
+    const title = (body.title || "").trim();
+    const slug = (body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, "-")).trim();
+    const category = body.category || "E-Books & Guides";
+    const description = body.description || "";
+    const price = Number(body.price) || 0;
+    const originalPrice = body.originalPrice ? Number(body.originalPrice) : (body.original_price ? Number(body.original_price) : null);
+    const fileFormat = body.fileFormat || body.file_format || "PDF";
+    const fileSize = body.fileSize || body.file_size || "4.5 MB";
+    const coverImageUrl = body.coverUrl || body.coverImageUrl || body.cover_image_url || "";
+    const badge = body.badge || null;
+    const paymentUrl = body.paymentUrl || body.payment_url || null;
+    const whatsInside = typeof body.whatsInside === "string" 
+      ? body.whatsInside 
+      : (Array.isArray(body.features) ? body.features.join("\n") : (body.whats_inside || null));
+
+    // Check available columns in D1
+    let colNames = new Set<string>();
+    try {
+      const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
+      if (tableCols && tableCols.length > 0) {
+        colNames = new Set(tableCols.map((c: any) => c.name.toLowerCase()));
+      }
+    } catch (e) {
+      console.warn("PRAGMA fallback active for PUT");
+    }
+
+    const candidateUpdates: Record<string, any> = {
+      title,
+      slug,
+      category,
+      description,
+      price,
+      original_price: originalPrice,
+      file_format: fileFormat,
+      file_size: fileSize,
+      cover_image_url: coverImageUrl,
+      badge,
+      payment_url: paymentUrl,
+      whats_inside: whatsInside,
+    };
+
+    if (colNames.has("updated_at")) {
+      candidateUpdates.updated_at = new Date().toISOString();
+    }
+
+    let validKeys = Object.keys(candidateUpdates);
+    if (colNames.size > 0) {
+      validKeys = validKeys.filter((k) => colNames.has(k.toLowerCase()));
+    }
+
+    const setClauses = validKeys.map((k) => `${k} = ?`).join(", ");
+    const values = validKeys.map((k) => candidateUpdates[k]);
+    values.push(body.id);
+
+    const sql = `UPDATE store_products SET ${setClauses} WHERE id = ?`;
+    await db.prepare(sql).bind(...values).run();
+
+    return NextResponse.json({
+      success: true,
+      message: "Product updated successfully",
+    });
+
+  } catch (err: any) {
+    console.error("Failed to update product in D1:", err);
+    return NextResponse.json(
+      { error: err.message || "Failed to update product" },
+      { status: 500 }
+    );
+  }
+}
+
+// 4. PATCH: Toggle Active / Hidden product visibility status
+export async function PATCH(req: Request) {
+  try {
+    const { env } = getRequestContext();
+    const db = (env as any).DB;
+
+    if (!db) {
+      return NextResponse.json({ error: "DB binding not found." }, { status: 500 });
+    }
+
+    const body: any = await req.json();
+    if (!body.id) {
+      return NextResponse.json({ error: "Product ID is required." }, { status: 400 });
+    }
+
+    await db
+      .prepare("UPDATE store_products SET is_active = ? WHERE id = ?")
+      .bind(body.isActive ? 1 : 0, body.id)
+      .run();
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Failed to patch product status:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+// 5. DELETE: Permanently remove product record
+export async function DELETE(req: Request) {
+  try {
+    const { env } = getRequestContext();
+    const db = (env as any).DB;
+
+    if (!db) {
+      return NextResponse.json({ error: "DB binding not found." }, { status: 500 });
+    }
+
+    const body: any = await req.json();
+    if (!body.id) {
+      return NextResponse.json({ error: "Product ID is required." }, { status: 400 });
+    }
+
+    await db
+      .prepare("DELETE FROM store_products WHERE id = ?")
+      .bind(body.id)
+      .run();
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Failed to delete product:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
