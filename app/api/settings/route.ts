@@ -159,11 +159,31 @@ export async function GET(req: Request) {
       "curiolot";
     const cleanPaypalHandle = (!rawHandle || rawHandle === "aries") ? "curiolot" : rawHandle;
 
-    // Gunakan judul dari database jika ada, jika belum ada gunakan format dinamis username
     const storeTitle = settingsRow?.store_title || defaultTitle;
     const showHero = settingsRow ? Boolean(settingsRow.show_hero) : true;
     const showBundle = settingsRow ? Boolean(settingsRow.show_bundle) : true;
     const showPromo = settingsRow ? Boolean(settingsRow.show_promo) : true;
+
+    // FILTER PENGAMAN BASE64: Jika tersimpan Base64 yang corrupt/terpotong di D1,
+    // langsung bersihkan menjadi string kosong agar browser tidak memicu net::ERR_INVALID_URL
+    let cleanLogoUrl = settingsRow?.logo_url || "";
+    if (cleanLogoUrl.startsWith("data:") && cleanLogoUrl.length > 30000) {
+      cleanLogoUrl = "";
+      // Bersihkan di background database D1
+      db.prepare("UPDATE store_settings SET logo_url = '' WHERE username = ?")
+        .bind(username)
+        .run()
+        .catch(() => {});
+    }
+
+    let cleanBannerUrl = settingsRow?.banner_url || "";
+    if (cleanBannerUrl.startsWith("data:") && cleanBannerUrl.length > 50000) {
+      cleanBannerUrl = "";
+      db.prepare("UPDATE store_settings SET banner_url = '' WHERE username = ?")
+        .bind(username)
+        .run()
+        .catch(() => {});
+    }
 
     return NextResponse.json({
       username,
@@ -171,12 +191,12 @@ export async function GET(req: Request) {
       storeName: storeTitle,
 
       // Logo & Avatar
-      logoUrl: settingsRow?.logo_url || "",
-      storeLogo: settingsRow?.logo_url || "",
+      logoUrl: cleanLogoUrl,
+      storeLogo: cleanLogoUrl,
 
       // Hero Banner
-      bannerUrl: settingsRow?.banner_url || "",
-      heroImageUrl: settingsRow?.banner_url || "",
+      bannerUrl: cleanBannerUrl,
+      heroImageUrl: cleanBannerUrl,
 
       // Hero Showcase Typography & Visibility
       heroBadge: settingsRow?.hero_badge || "Featured Release",
@@ -252,21 +272,23 @@ export async function POST(req: Request) {
       defaultTitle
     ).trim();
 
-    // Safeguard base64 size to prevent D1 1MB SQLITE_TOOBIG statement crash
-    let logoUrl = body.logoUrl || body.storeLogo || body.avatarUrl || "";
-    if (logoUrl.startsWith("data:") && logoUrl.length > 500000) {
-      console.warn("Logo base64 exceeds safe D1 packet size. Retaining existing logo to protect transaction.");
-      logoUrl = existing?.logo_url || "";
-    } else if (!logoUrl && existing?.logo_url) {
-      logoUrl = existing.logo_url;
+    // MENGIZINKAN LOGO KOSONG: Jika user menekan Reset to Monogram (body.logoUrl === ""), simpan "" ke D1
+    let logoUrl = typeof body.logoUrl === "string" 
+      ? body.logoUrl.trim() 
+      : (body.storeLogo || body.avatarUrl || "");
+
+    // Cegah Base64 corrupt yang terlalu panjang merusak tabel
+    if (logoUrl.startsWith("data:") && logoUrl.length > 30000) {
+      logoUrl = "";
     }
 
-    let bannerUrl = body.bannerUrl || body.heroImageUrl || body.bannerImageUrl || "";
-    if (bannerUrl.startsWith("data:") && bannerUrl.length > 700000) {
-      console.warn("Banner base64 exceeds safe D1 packet size. Retaining existing banner to protect transaction.");
-      bannerUrl = existing?.banner_url || "";
-    } else if (!bannerUrl && existing?.banner_url) {
-      bannerUrl = existing.banner_url;
+    // MENGIZINKAN BANNER DIRESET: Jika user reset banner, jangan kembalikan base64 lama
+    let bannerUrl = typeof body.bannerUrl === "string"
+      ? body.bannerUrl.trim()
+      : (body.heroImageUrl || body.bannerImageUrl || "");
+
+    if (bannerUrl.startsWith("data:") && bannerUrl.length > 50000) {
+      bannerUrl = "";
     }
 
     const heroBadge = body.heroBadge || body.badgeTag || existing?.hero_badge || "Featured Release";
@@ -301,7 +323,7 @@ export async function POST(req: Request) {
 
     const payoutProvider = body.payoutProvider || existing?.payout_provider || "paypal";
 
-    // Atomic upsert into D1
+    // Simpan ke D1 - Nilai logo_url dan banner_url ditimpa langsung tanpa CASE WHEN yang menahannya
     await db.prepare(`
       INSERT INTO store_settings (
         username, store_title, logo_url, banner_url,
@@ -320,8 +342,8 @@ export async function POST(req: Request) {
       )
       ON CONFLICT(username) DO UPDATE SET
         store_title = excluded.store_title,
-        logo_url = CASE WHEN excluded.logo_url != '' THEN excluded.logo_url ELSE store_settings.logo_url END,
-        banner_url = CASE WHEN excluded.banner_url != '' THEN excluded.banner_url ELSE store_settings.banner_url END,
+        logo_url = excluded.logo_url,
+        banner_url = excluded.banner_url,
         hero_badge = excluded.hero_badge,
         hero_title = excluded.hero_title,
         hero_description = excluded.hero_description,
@@ -349,7 +371,7 @@ export async function POST(req: Request) {
       cleanPaypalHandle, payoutProvider, new Date().toISOString()
     ).run();
 
-    // Synchronize paypal handle into users table as well
+    // Sinkronkan ke tabel users jika ada
     try {
       await db.prepare("UPDATE users SET paypal_handle = ?, payout_provider = ? WHERE username = ?")
         .bind(cleanPaypalHandle, payoutProvider, username)
