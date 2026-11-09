@@ -22,9 +22,26 @@ import {
 } from "lucide-react";
 import type { StoreSettings, PayoutProvider } from "@/lib/storeSettings";
 
+const DEFAULT_COVER_IMAGE = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80";
+
 export default function NewProductPage() {
   const router = useRouter();
-  const username = "aries";
+
+  // Dynamically resolve active username from browser session
+  const [username, setUsername] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const storedSession = localStorage.getItem("curiolot_session");
+      if (storedSession) {
+        try {
+          const parsed = JSON.parse(storedSession);
+          if (parsed?.username) return parsed.username.toLowerCase();
+          if (parsed?.name) return parsed.name.toLowerCase().replace(/\s+/g, "");
+          if (parsed?.email) return parsed.email.split("@")[0].toLowerCase();
+        } catch (e) {}
+      }
+    }
+    return "aries";
+  });
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +64,7 @@ export default function NewProductPage() {
   const [features, setFeatures] = useState("");
   const [coverUrl, setCoverUrl] = useState("");
   const [uploadCoverName, setUploadCoverName] = useState<string | null>(null);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [fileFormat, setFileFormat] = useState("PDF");
   const [badge, setBadge] = useState("New Release");
   
@@ -105,7 +123,7 @@ export default function NewProductPage() {
           if (data.payoutKofiUrl) setKofiUrl(data.payoutKofiUrl);
           if (data.payoutCustomUrl) setCustomUrl(data.payoutCustomUrl);
 
-          // Pro status verified from central superadmin
+          // Pro status verified from central settings
           if (typeof data.isPro !== "undefined") {
             setIsPro(Boolean(data.isPro));
           } else if (data.plan) {
@@ -194,7 +212,6 @@ export default function NewProductPage() {
           .replace(/\/.*$/, "")
           .trim();
 
-        // Enforce curiolot if handle is empty or fell back to username aries
         if (!cleanHandle || cleanHandle === "aries") {
           cleanHandle = "curiolot";
         }
@@ -231,24 +248,41 @@ export default function NewProductPage() {
     }
   };
 
-  // Upload product cover mockup image
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload product cover mockup image directly to Cloudflare R2 bucket (curiolot-media)
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image size exceeds 5 MB. Please choose a smaller image.");
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image size exceeds 10 MB limit. Please select a smaller image.");
       return;
     }
 
     setUploadCoverName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === "string") {
-        setCoverUrl(reader.result);
+    setIsUploadingCover(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("username", username);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to upload cover artwork to Cloudflare R2.");
       }
-    };
-    reader.readAsDataURL(file);
+
+      setCoverUrl(data.url);
+    } catch (err: any) {
+      console.error("Cover artwork upload error:", err);
+      alert("Cover artwork upload failed: " + (err.message || "Network error"));
+    } finally {
+      setIsUploadingCover(false);
+    }
   };
 
   // Upload product file + auto-detect extension format & enforce plan limits
@@ -301,7 +335,7 @@ export default function NewProductPage() {
       price: isFree ? 0 : parseFloat(price) || 0,
       originalPrice: isFree || !originalPrice ? null : parseFloat(originalPrice) || null,
       badge: badge.trim() || undefined,
-      coverUrl: coverUrl || "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80",
+      coverUrl: coverUrl || DEFAULT_COVER_IMAGE,
       paymentUrl: autoLockedPaymentUrl,
       sellerCheckoutUrl: autoLockedPaymentUrl,
       fileFormat,
@@ -588,13 +622,13 @@ export default function NewProductPage() {
                       <input
                         type="url"
                         required
-                        placeholder="https://... or choose a local file below"
+                        placeholder="Direct image URL (https://pub-af30dd30344d4c978a0b58579942823d.r2.dev/...)"
                         value={coverUrl}
                         onChange={(e) => {
                           setCoverUrl(e.target.value);
                           setUploadCoverName(null);
                         }}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 hover:bg-slate-100/60 focus:bg-white text-xs rounded-xl border border-slate-200 focus:border-slate-900 focus:outline-none transition"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 hover:bg-slate-100/60 focus:bg-white text-xs rounded-xl border border-slate-200 focus:border-slate-900 focus:outline-none transition font-mono"
                       />
                     </div>
 
@@ -610,15 +644,29 @@ export default function NewProductPage() {
                       onClick={() => coverInputRef.current?.click()}
                       className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/70 hover:bg-slate-100/50 rounded-2xl p-5 text-center cursor-pointer transition flex flex-col items-center justify-center gap-1.5 group"
                     >
-                      <div className="w-9 h-9 rounded-full bg-white shadow-2xs border border-slate-200 flex items-center justify-center text-slate-600 group-hover:scale-105 transition">
-                        <UploadCloud className="w-4 h-4 text-indigo-600" />
-                      </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        {uploadCoverName ? `Selected: ${uploadCoverName}` : (coverUrl ? "Click to replace current cover" : "Click to upload product cover image")}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Any dimensions supported (Portrait or Landscape will auto-center)
-                      </p>
+                      {isUploadingCover ? (
+                        <>
+                          <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+                          <p className="text-xs font-bold text-slate-800">Uploading cover artwork to Cloudflare R2...</p>
+                          <p className="text-[11px] text-slate-400">Storing image into curiolot-media bucket</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-9 h-9 rounded-full bg-white shadow-2xs border border-slate-200 flex items-center justify-center text-slate-600 group-hover:scale-105 transition">
+                            <UploadCloud className="w-4 h-4 text-indigo-600" />
+                          </div>
+                          <p className="text-xs font-bold text-slate-800">
+                            {uploadCoverName
+                              ? `Selected: ${uploadCoverName}`
+                              : coverUrl
+                              ? "Click to replace current cover image"
+                              : "Click to upload product cover image"}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            Directly uploaded & hosted on Cloudflare R2 (curiolot-media)
+                          </p>
+                        </>
+                      )}
                     </div>
 
                     <div className="rounded-xl bg-amber-50/70 border border-amber-200/80 p-3 text-[11px] text-amber-950 space-y-1">
@@ -650,6 +698,9 @@ export default function NewProductPage() {
                             <img
                               src={coverUrl}
                               alt="Mockup Preview"
+                              onError={(e) => {
+                                e.currentTarget.src = DEFAULT_COVER_IMAGE;
+                              }}
                               className="w-full h-full object-contain"
                             />
                             {badge && (
@@ -817,10 +868,16 @@ export default function NewProductPage() {
             </Link>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isUploadingCover}
               className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 disabled:opacity-50 cursor-pointer flex items-center gap-2"
             >
-              {editId ? <Save className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : editId ? (
+                <Save className="w-4 h-4" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
               <span>
                 {isSubmitting 
                   ? (editId ? "Updating Product..." : "Publishing Product...") 
