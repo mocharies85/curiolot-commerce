@@ -19,61 +19,12 @@ if (!globalThis.globalUsersDb) {
   };
 }
 
-// Helper: Ensure users table and auto-migrate all missing columns in D1
-async function ensureUsersTable(db: any) {
-  try {
-    await db.prepare(`
-      CREATE TABLE IF NOT EXISTS users (
-        username TEXT PRIMARY KEY,
-        email TEXT UNIQUE,
-        password TEXT,
-        name TEXT,
-        is_pro INTEGER DEFAULT 1,
-        paypal_handle TEXT,
-        payout_provider TEXT DEFAULT 'paypal',
-        created_at TEXT
-      )
-    `).run();
-
-    // Auto-migrate missing columns if the table was created in an older schema
-    const { results } = await db
-      .prepare("PRAGMA table_info(users)")
-      .all()
-      .catch(() => ({ results: [] }));
-
-    if (results && results.length > 0) {
-      const existingCols = new Set(results.map((c: any) => c.name.toLowerCase()));
-      const columnsToCheck = [
-        { name: "password", type: "TEXT" },
-        { name: "name", type: "TEXT" },
-        { name: "email", type: "TEXT" },
-        { name: "is_pro", type: "INTEGER DEFAULT 1" },
-        { name: "paypal_handle", type: "TEXT" },
-        { name: "payout_provider", type: "TEXT DEFAULT 'paypal'" },
-        { name: "created_at", type: "TEXT" },
-      ];
-
-      for (const col of columnsToCheck) {
-        if (!existingCols.has(col.name.toLowerCase())) {
-          try {
-            await db.prepare(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`).run();
-          } catch (e) {
-            console.warn(`Column migration skipped for ${col.name}:`, e);
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Users table initialization warning:", err);
-  }
-}
-
 export async function POST(request: Request) {
   try {
     const body: any = await request.json();
     const { username, email, password, agreedToTerms, agreeTerms, terms, name } = body;
 
-    // 1. Validasi Terms of Service
+    // 1. Validasi persetujuan Terms of Service
     const isAgreed = Boolean(agreedToTerms || agreeTerms || terms || body.agree);
     if (!isAgreed) {
       return NextResponse.json(
@@ -89,7 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Generate username otomatis dari nama lengkap atau email jika username kosong
+    // 2. Generate username otomatis dari nama atau email jika username kosong
     const rawName = (name || body.fullName || username || email.split("@")[0]).trim();
     const resolvedUsername = (
       username ||
@@ -105,8 +56,6 @@ export async function POST(request: Request) {
     } catch (e) {}
 
     if (db) {
-      await ensureUsersTable(db);
-
       // Periksa apakah username atau email sudah pernah terdaftar
       const existingUser: any = await db
         .prepare("SELECT username, email FROM users WHERE username = ? OR email = ? LIMIT 1")
@@ -122,17 +71,52 @@ export async function POST(request: Request) {
         );
       }
 
-      // Masukkan akun baru ke tabel users di D1
-      await db
-        .prepare(`
-          INSERT INTO users (username, email, password, name, is_pro, created_at)
-          VALUES (?, ?, ?, ?, 1, ?)
-        `)
-        .bind(resolvedUsername, email, password, rawName, new Date().toISOString())
-        .run();
+      // 4. Deteksi struktur kolom tabel users di D1
+      const { results } = await db
+        .prepare("PRAGMA table_info(users)")
+        .all()
+        .catch(() => ({ results: [] }));
+
+      const existingCols = new Set(
+        (results || []).map((col: any) => col.name.toLowerCase())
+      );
+
+      const fields: string[] = ["username", "email"];
+      const values: any[] = [resolvedUsername, email];
+
+      // PENGAMAN UTAMA: Isi password_hash agar lolos dari aturan NOT NULL constraint
+      if (existingCols.has("password_hash")) {
+        fields.push("password_hash");
+        values.push(password);
+      }
+
+      if (existingCols.has("password")) {
+        fields.push("password");
+        values.push(password);
+      }
+
+      if (existingCols.has("name")) {
+        fields.push("name");
+        values.push(rawName);
+      }
+
+      if (existingCols.has("is_pro")) {
+        fields.push("is_pro");
+        values.push(1);
+      }
+
+      if (existingCols.has("created_at")) {
+        fields.push("created_at");
+        values.push(new Date().toISOString());
+      }
+
+      const placeholders = fields.map(() => "?").join(", ");
+      const insertSql = `INSERT INTO users (${fields.join(", ")}) VALUES (${placeholders})`;
+
+      await db.prepare(insertSql).bind(...values).run();
     }
 
-    // Fallback cadangan ke global memory
+    // Fallback memori lokal
     if (!globalThis.globalUsersDb) {
       globalThis.globalUsersDb = {};
     }
