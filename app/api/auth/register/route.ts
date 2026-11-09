@@ -53,7 +53,7 @@ async function ensureUsersTable(db: any) {
 }
 
 // 2. Helper Kirim Email Aktivasi Resmi Curiolot via Resend API
-export async function sendActivationEmail(email: string, username: string, token: string) {
+async function sendActivationEmail(email: string, username: string, token: string) {
   const activationUrl = `https://store.curiolot.com/api/verify?token=${token}`;
 
   const emailHtml = `
@@ -130,7 +130,6 @@ export async function POST(request: Request) {
     const body: any = await request.json();
     const { username, email, password, agreedToTerms, agreeTerms, terms, name } = body;
 
-    // Validasi Terms of Service
     const isAgreed = Boolean(agreedToTerms || agreeTerms || terms || body.agree);
     if (!isAgreed) {
       return NextResponse.json(
@@ -180,7 +179,7 @@ export async function POST(request: Request) {
           );
         }
 
-        // Jika belum aktif, perbarui token dan kirim ulang email aktivasi
+        // Perbarui token aktivasi & kirim ulang email via Resend
         await db
           .prepare(
             "UPDATE users SET verification_token = ?, password_hash = ?, password = ? WHERE LOWER(email) = LOWER(?)"
@@ -207,7 +206,6 @@ export async function POST(request: Request) {
       const fields = ["username", "email", "is_activated", "verification_token"];
       const values = [resolvedUsername, email, 0, verificationToken];
 
-      // Memenuhi aturan NOT NULL constraint D1
       if (existingCols.has("password_hash")) {
         fields.push("password_hash");
         values.push(password);
