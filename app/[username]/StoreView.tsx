@@ -165,11 +165,12 @@ export default function StoreView({ username }: StoreViewProps) {
 
       if (authMode === "signup") {
         if (!agreeTerms) {
-          setAuthError("You must agree to the Terms of Service and Privacy Policy to create an account.");
+          setAuthError("You must accept the Terms of Service and Privacy Policy to create an account.");
           setIsSubmittingAuth(false);
           return;
         }
 
+        // Sertakan terms dan agreeTerms di payload registrasi
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -177,6 +178,8 @@ export default function StoreView({ username }: StoreViewProps) {
             name: authName,
             email: authEmail,
             password: authPassword,
+            terms: true,
+            agreeTerms: true,
           }),
         });
 
@@ -185,6 +188,10 @@ export default function StoreView({ username }: StoreViewProps) {
         if (!res.ok) {
           setAuthError(data?.error || "Failed to create account. Please try again.");
           return;
+        }
+
+        if (typeof window !== "undefined") {
+          localStorage.setItem("curiolot_session", JSON.stringify(data?.user || { email: authEmail, name: authName }));
         }
 
         alert("Account registered successfully! Redirecting to your dashboard...");
@@ -332,7 +339,6 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.badgeTagText || 
     "Featured Release";
 
-  // Helper untuk membaca nilai toggle (boolean, number, string)
   const checkIsActive = (val: any, fallback = false) => {
     if (val === undefined || val === null) return fallback;
     if (val === true || val === 1 || val === "1" || val === "active" || val === "visible" || val === "true") return true;
@@ -368,7 +374,6 @@ export default function StoreView({ username }: StoreViewProps) {
     true
   );
 
-  // KUNCI PERBAIKAN: Baca toggle Hidden/Visible untuk tiap elemen teks hero
   const showBadge = checkIsActive(
     (settings as any)?.showHeroBadge ?? (settings as any)?.show_hero_badge,
     false
@@ -384,7 +389,6 @@ export default function StoreView({ username }: StoreViewProps) {
     false
   ) && Boolean(heroDescriptionText);
 
-  // Jika semua teks disembunyikan, hasHeroText menjadi false (banner murni tanpa gradien gelap)
   const hasHeroText = showBadge || showTitle || showDesc;
 
   return (
@@ -937,6 +941,7 @@ export default function StoreView({ username }: StoreViewProps) {
                 </div>
               </div>
 
+              {/* Checkbox persetujuan dengan styling hijau emerald & tautan seperti Curiolot Link */}
               {authMode === "signup" && (
                 <div className="flex items-start gap-2.5 text-left pt-1">
                   <input
@@ -944,16 +949,24 @@ export default function StoreView({ username }: StoreViewProps) {
                     id="agreeTerms"
                     checked={agreeTerms}
                     onChange={(e) => setAgreeTerms(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer"
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
                     required
                   />
                   <label htmlFor="agreeTerms" className="text-xs text-slate-500 leading-snug cursor-pointer select-none">
-                    I agree to the{" "}
-                    <Link href="/terms" target="_blank" className="font-semibold text-slate-900 underline hover:text-slate-700">
+                    I have read and agree to the{" "}
+                    <Link 
+                      href="/terms" 
+                      target="_blank" 
+                      className="font-semibold text-emerald-600 hover:text-emerald-700 underline transition-colors"
+                    >
                       Terms of Service
                     </Link>{" "}
                     and{" "}
-                    <Link href="/privacy" target="_blank" className="font-semibold text-slate-900 underline hover:text-slate-700">
+                    <Link 
+                      href="/privacy" 
+                      target="_blank" 
+                      className="font-semibold text-emerald-600 hover:text-emerald-700 underline transition-colors"
+                    >
                       Privacy Policy
                     </Link>.
                   </label>
@@ -972,7 +985,7 @@ export default function StoreView({ username }: StoreViewProps) {
                     ? "Create Creator Store" 
                     : authMode === "login" 
                     ? "Log In" 
-                    : "Create Account"}
+                    : "Get Started for Free"}
                 </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
