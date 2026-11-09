@@ -54,7 +54,6 @@ export default function StoreView({ username }: StoreViewProps) {
   const [settings, setSettings] = useState<StoreSettings | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Status proteksi jika file gambar gagal decode / corrupt Base64
   const [logoFailed, setLogoFailed] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState("All Assets");
@@ -73,7 +72,6 @@ export default function StoreView({ username }: StoreViewProps) {
   const [authError, setAuthError] = useState("");
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Load public products and store customization from API & Local Persistence
   useEffect(() => {
     async function loadStoreData() {
       try {
@@ -273,7 +271,6 @@ export default function StoreView({ username }: StoreViewProps) {
     });
   }, [products, selectedCategory, searchQuery]);
 
-  // Robust field normalization
   const formattedUsername = username 
     ? username.charAt(0).toUpperCase() + username.slice(1) 
     : "Creator";
@@ -287,7 +284,6 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.avatarUrl || 
     (settings as any)?.logo;
 
-  // Abaikan Base64 korup yang terlalu panjang langsung dari state
   const storeLogo = (rawLogo && rawLogo.startsWith("data:") && rawLogo.length > 30000) 
     ? "" 
     : rawLogo;
@@ -336,7 +332,8 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.badgeTagText || 
     "Featured Release";
 
-  const checkIsActive = (val: any, fallback = true) => {
+  // Helper untuk membaca nilai toggle (boolean, number, string)
+  const checkIsActive = (val: any, fallback = false) => {
     if (val === undefined || val === null) return fallback;
     if (val === true || val === 1 || val === "1" || val === "active" || val === "visible" || val === "true") return true;
     if (val === false || val === 0 || val === "0" || val === "hidden" || val === "false") return false;
@@ -371,9 +368,23 @@ export default function StoreView({ username }: StoreViewProps) {
     true
   );
 
-  const showBadge = Boolean(heroBadgeText);
-  const showTitle = Boolean(heroHeadlineText);
-  const showDesc = Boolean(heroDescriptionText);
+  // KUNCI PERBAIKAN: Baca toggle Hidden/Visible untuk tiap elemen teks hero
+  const showBadge = checkIsActive(
+    (settings as any)?.showHeroBadge ?? (settings as any)?.show_hero_badge,
+    false
+  ) && Boolean(heroBadgeText);
+
+  const showTitle = checkIsActive(
+    (settings as any)?.showHeroTitle ?? (settings as any)?.show_hero_title,
+    false
+  ) && Boolean(heroHeadlineText);
+
+  const showDesc = checkIsActive(
+    (settings as any)?.showHeroDescription ?? (settings as any)?.show_hero_description,
+    false
+  ) && Boolean(heroDescriptionText);
+
+  // Jika semua teks disembunyikan, hasHeroText menjadi false (banner murni tanpa gradien gelap)
   const hasHeroText = showBadge || showTitle || showDesc;
 
   return (
@@ -382,7 +393,7 @@ export default function StoreView({ username }: StoreViewProps) {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo with Anti-Broken Guard */}
+          {/* Brand Identity & Logo */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="shrink-0">
               {storeLogo && !logoFailed ? (
@@ -599,7 +610,7 @@ export default function StoreView({ username }: StoreViewProps) {
 
         <div className={`grid grid-cols-1 ${showBundle ? "lg:grid-cols-4" : "lg:grid-cols-1"} gap-8`}>
           
-          {/* Side Promo Card (Bundle Offer) */}
+          {/* Side Promo Card */}
           {showBundle && (
             <div className="lg:col-span-1 rounded-3xl bg-linear-to-b from-amber-500 to-amber-600 p-8 text-white flex flex-col justify-between shadow-lg relative overflow-hidden">
               <div className="relative z-10 space-y-4">
@@ -642,7 +653,7 @@ export default function StoreView({ username }: StoreViewProps) {
             </div>
           )}
 
-          {/* Product Cards Grid with Anti-Broken Fallback */}
+          {/* Product Cards Grid */}
           <div className={showBundle ? "lg:col-span-3" : "lg:col-span-1"}>
             {isLoading ? (
               <div className="bg-white rounded-3xl p-16 text-center border border-slate-200/80 shadow-xs">

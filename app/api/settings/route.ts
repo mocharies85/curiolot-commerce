@@ -3,13 +3,11 @@ import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
-// Helper: Format username menjadi nama toko default (contoh: 'vanth' -> 'Vanth Store')
 function getDefaultStoreTitle(username: string): string {
   if (!username) return "Creator Store";
   return `${username.charAt(0).toUpperCase() + username.slice(1)} Store`;
 }
 
-// Helper: Ensure store_settings table and all required columns exist in D1
 async function ensureStoreSettingsTable(db: any) {
   try {
     await db.prepare(`
@@ -22,6 +20,9 @@ async function ensureStoreSettingsTable(db: any) {
         hero_title TEXT,
         hero_description TEXT,
         show_hero INTEGER DEFAULT 1,
+        show_hero_badge INTEGER DEFAULT 0,
+        show_hero_title INTEGER DEFAULT 0,
+        show_hero_description INTEGER DEFAULT 0,
         show_bundle INTEGER DEFAULT 1,
         show_promo INTEGER DEFAULT 1,
         bundle_badge TEXT,
@@ -39,7 +40,6 @@ async function ensureStoreSettingsTable(db: any) {
       )
     `).run();
 
-    // Auto-migrate any missing columns if table was created in an earlier schema
     const { results } = await db
       .prepare("PRAGMA table_info(store_settings)")
       .all()
@@ -55,6 +55,9 @@ async function ensureStoreSettingsTable(db: any) {
         { name: "hero_title", type: "TEXT" },
         { name: "hero_description", type: "TEXT" },
         { name: "show_hero", type: "INTEGER DEFAULT 1" },
+        { name: "show_hero_badge", type: "INTEGER DEFAULT 0" },
+        { name: "show_hero_title", type: "INTEGER DEFAULT 0" },
+        { name: "show_hero_description", type: "INTEGER DEFAULT 0" },
         { name: "show_bundle", type: "INTEGER DEFAULT 1" },
         { name: "show_promo", type: "INTEGER DEFAULT 1" },
         { name: "bundle_badge", type: "TEXT" },
@@ -75,9 +78,7 @@ async function ensureStoreSettingsTable(db: any) {
         if (!existingCols.has(col.name.toLowerCase())) {
           try {
             await db.prepare(`ALTER TABLE store_settings ADD COLUMN ${col.name} ${col.type}`).run();
-          } catch {
-            // Column already present or migration skipped safely
-          }
+          } catch {}
         }
       }
     }
@@ -86,8 +87,7 @@ async function ensureStoreSettingsTable(db: any) {
   }
 }
 
-// Helper: Normalize multiple frontend visibility formats (boolean, string, number)
-function parseVisibility(value: any, fallback: number = 1): number {
+function parseVisibility(value: any, fallback: number = 0): number {
   if (value === undefined || value === null) return fallback;
   if (
     value === true ||
@@ -111,7 +111,6 @@ function parseVisibility(value: any, fallback: number = 1): number {
   return fallback;
 }
 
-// 1. GET: Fetch complete storefront customization, branding, and payout configuration
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -126,6 +125,10 @@ export async function GET(req: Request) {
         username,
         storeTitle: defaultTitle,
         storeName: defaultTitle,
+        showHero: true,
+        showHeroBadge: false,
+        showHeroTitle: false,
+        showHeroDescription: false,
         payoutProvider: "paypal",
         payoutPaypalHandle: "curiolot",
         paypalHandle: "curiolot",
@@ -164,25 +167,21 @@ export async function GET(req: Request) {
     const showBundle = settingsRow ? Boolean(settingsRow.show_bundle) : true;
     const showPromo = settingsRow ? Boolean(settingsRow.show_promo) : true;
 
-    // FILTER PENGAMAN BASE64: Jika tersimpan Base64 yang corrupt/terpotong di D1,
-    // langsung bersihkan menjadi string kosong agar browser tidak memicu net::ERR_INVALID_URL
+    // Membaca status toggle teks
+    const showHeroBadge = settingsRow ? Boolean(settingsRow.show_hero_badge) : false;
+    const showHeroTitle = settingsRow ? Boolean(settingsRow.show_hero_title) : false;
+    const showHeroDescription = settingsRow ? Boolean(settingsRow.show_hero_description) : false;
+
     let cleanLogoUrl = settingsRow?.logo_url || "";
     if (cleanLogoUrl.startsWith("data:") && cleanLogoUrl.length > 30000) {
       cleanLogoUrl = "";
-      // Bersihkan di background database D1
-      db.prepare("UPDATE store_settings SET logo_url = '' WHERE username = ?")
-        .bind(username)
-        .run()
-        .catch(() => {});
+      db.prepare("UPDATE store_settings SET logo_url = '' WHERE username = ?").bind(username).run().catch(() => {});
     }
 
     let cleanBannerUrl = settingsRow?.banner_url || "";
     if (cleanBannerUrl.startsWith("data:") && cleanBannerUrl.length > 50000) {
       cleanBannerUrl = "";
-      db.prepare("UPDATE store_settings SET banner_url = '' WHERE username = ?")
-        .bind(username)
-        .run()
-        .catch(() => {});
+      db.prepare("UPDATE store_settings SET banner_url = '' WHERE username = ?").bind(username).run().catch(() => {});
     }
 
     return NextResponse.json({
@@ -190,25 +189,25 @@ export async function GET(req: Request) {
       storeTitle,
       storeName: storeTitle,
 
-      // Logo & Avatar
       logoUrl: cleanLogoUrl,
       storeLogo: cleanLogoUrl,
 
-      // Hero Banner
       bannerUrl: cleanBannerUrl,
       heroImageUrl: cleanBannerUrl,
 
-      // Hero Showcase Typography & Visibility
       heroBadge: settingsRow?.hero_badge || "Featured Release",
       badgeTag: settingsRow?.hero_badge || "Featured Release",
       heroTitle: settingsRow?.hero_title || "Original Digital Assets & Creative Works",
       mainHeadline: settingsRow?.hero_title || "Original Digital Assets & Creative Works",
       heroDescription: settingsRow?.hero_description || "Supercharge your creative workflow with production-ready assets.",
       subHeadline: settingsRow?.hero_description || "Supercharge your creative workflow with production-ready assets.",
+      
       showHero,
       showHeroBanner: showHero,
+      showHeroBadge,
+      showHeroTitle,
+      showHeroDescription,
 
-      // Promotion & Bundle Card Visibility Flags
       showBundle,
       showBundleCard: showBundle,
       isBundleActive: showBundle,
@@ -216,20 +215,17 @@ export async function GET(req: Request) {
       showDiscountCoupon: showPromo,
       isCouponActive: showPromo,
 
-      // Bundle Details
       bundleBadge: settingsRow?.bundle_badge || "Bundle Offer",
       bundleTitle: settingsRow?.bundle_title || "Save Up to 60% on All Graphic Bundles",
       bundleDescription: settingsRow?.bundle_description || "Unlock instant access to the complete digital asset library.",
       bundleUrl: settingsRow?.bundle_url || "#",
       bundleButtonText: settingsRow?.bundle_btn_text || "Get Complete Bundle",
 
-      // Coupon Details
       promoBadge: settingsRow?.promo_badge || "Limited Time Offer",
       promoTitle: settingsRow?.promo_title || "Get 30% Off Your First Order",
       promoDescription: settingsRow?.promo_description || "Apply this coupon code at checkout to claim your launch discount.",
       promoCode: settingsRow?.promo_code || "CURIOLOT30",
 
-      // Centralized Payout Routing
       payoutProvider: settingsRow?.payout_provider || userRow?.payout_provider || "paypal",
       payoutPaypalHandle: cleanPaypalHandle,
       paypalHandle: cleanPaypalHandle,
@@ -242,7 +238,6 @@ export async function GET(req: Request) {
   }
 }
 
-// 2. POST: Save and persist branding, banners, visibility switches, and payout details
 export async function POST(req: Request) {
   try {
     const { env } = getRequestContext();
@@ -257,7 +252,6 @@ export async function POST(req: Request) {
     const username = body.username || "aries";
     const defaultTitle = getDefaultStoreTitle(username);
 
-    // Retrieve existing record to retain unchanged values
     const existing: any = await db
       .prepare("SELECT * FROM store_settings WHERE username = ? LIMIT 1")
       .bind(username)
@@ -272,32 +266,32 @@ export async function POST(req: Request) {
       defaultTitle
     ).trim();
 
-    // MENGIZINKAN LOGO KOSONG: Jika user menekan Reset to Monogram (body.logoUrl === ""), simpan "" ke D1
     let logoUrl = typeof body.logoUrl === "string" 
       ? body.logoUrl.trim() 
       : (body.storeLogo || body.avatarUrl || "");
+    if (logoUrl.startsWith("data:") && logoUrl.length > 30000) logoUrl = "";
 
-    // Cegah Base64 corrupt yang terlalu panjang merusak tabel
-    if (logoUrl.startsWith("data:") && logoUrl.length > 30000) {
-      logoUrl = "";
-    }
-
-    // MENGIZINKAN BANNER DIRESET: Jika user reset banner, jangan kembalikan base64 lama
     let bannerUrl = typeof body.bannerUrl === "string"
       ? body.bannerUrl.trim()
       : (body.heroImageUrl || body.bannerImageUrl || "");
-
-    if (bannerUrl.startsWith("data:") && bannerUrl.length > 50000) {
-      bannerUrl = "";
-    }
+    if (bannerUrl.startsWith("data:") && bannerUrl.length > 50000) bannerUrl = "";
 
     const heroBadge = body.heroBadge || body.badgeTag || existing?.hero_badge || "Featured Release";
     const heroTitle = body.heroTitle || body.mainHeadline || existing?.hero_title || "Original Digital Assets & Creative Works";
     const heroDescription = body.heroDescription || body.subHeadline || existing?.hero_description || "";
 
-    // Resolve visibility states with multi-source fallback
     const rawHero = body.showHero ?? body.showHeroBanner ?? body.bannerActive ?? body.isHeroActive ?? existing?.show_hero;
     const showHero = parseVisibility(rawHero, 1);
+
+    // Parse toggle status untuk disimpan ke D1
+    const rawHeroBadge = body.showHeroBadge ?? existing?.show_hero_badge;
+    const showHeroBadge = parseVisibility(rawHeroBadge, 0);
+
+    const rawHeroTitle = body.showHeroTitle ?? existing?.show_hero_title;
+    const showHeroTitle = parseVisibility(rawHeroTitle, 0);
+
+    const rawHeroDesc = body.showHeroDescription ?? existing?.show_hero_description;
+    const showHeroDescription = parseVisibility(rawHeroDesc, 0);
 
     const rawBundle = body.showBundle ?? body.showBundleCard ?? body.isBundleActive ?? body.bundleActive ?? body.bundleStatus ?? existing?.show_bundle;
     const showBundle = parseVisibility(rawBundle, 1);
@@ -323,11 +317,11 @@ export async function POST(req: Request) {
 
     const payoutProvider = body.payoutProvider || existing?.payout_provider || "paypal";
 
-    // Simpan ke D1 - Nilai logo_url dan banner_url ditimpa langsung tanpa CASE WHEN yang menahannya
     await db.prepare(`
       INSERT INTO store_settings (
         username, store_title, logo_url, banner_url,
         hero_badge, hero_title, hero_description, show_hero,
+        show_hero_badge, show_hero_title, show_hero_description,
         show_bundle, show_promo,
         bundle_badge, bundle_title, bundle_description, bundle_url, bundle_btn_text,
         promo_badge, promo_title, promo_description, promo_code,
@@ -335,6 +329,7 @@ export async function POST(req: Request) {
       ) VALUES (
         ?, ?, ?, ?,
         ?, ?, ?, ?,
+        ?, ?, ?,
         ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -348,6 +343,9 @@ export async function POST(req: Request) {
         hero_title = excluded.hero_title,
         hero_description = excluded.hero_description,
         show_hero = excluded.show_hero,
+        show_hero_badge = excluded.show_hero_badge,
+        show_hero_title = excluded.show_hero_title,
+        show_hero_description = excluded.show_hero_description,
         show_bundle = excluded.show_bundle,
         show_promo = excluded.show_promo,
         bundle_badge = excluded.bundle_badge,
@@ -365,20 +363,18 @@ export async function POST(req: Request) {
     `).bind(
       username, storeTitle, logoUrl, bannerUrl,
       heroBadge, heroTitle, heroDescription, showHero,
+      showHeroBadge, showHeroTitle, showHeroDescription,
       showBundle, showPromo,
       bundleBadge, bundleTitle, bundleDescription, bundleUrl, bundleBtnText,
       promoBadge, promoTitle, promoDescription, promoCode,
       cleanPaypalHandle, payoutProvider, new Date().toISOString()
     ).run();
 
-    // Sinkronkan ke tabel users jika ada
     try {
       await db.prepare("UPDATE users SET paypal_handle = ?, payout_provider = ? WHERE username = ?")
         .bind(cleanPaypalHandle, payoutProvider, username)
         .run();
-    } catch {
-      // Non-blocking fallback
-    }
+    } catch {}
 
     return NextResponse.json({
       success: true,
