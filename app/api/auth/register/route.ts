@@ -19,7 +19,7 @@ if (!globalThis.globalUsersDb) {
   };
 }
 
-// Helper: Memastikan tabel users tersedia di Cloudflare D1
+// Helper: Ensure users table and auto-migrate all missing columns in D1
 async function ensureUsersTable(db: any) {
   try {
     await db.prepare(`
@@ -34,6 +34,35 @@ async function ensureUsersTable(db: any) {
         created_at TEXT
       )
     `).run();
+
+    // Auto-migrate missing columns if the table was created in an older schema
+    const { results } = await db
+      .prepare("PRAGMA table_info(users)")
+      .all()
+      .catch(() => ({ results: [] }));
+
+    if (results && results.length > 0) {
+      const existingCols = new Set(results.map((c: any) => c.name.toLowerCase()));
+      const columnsToCheck = [
+        { name: "password", type: "TEXT" },
+        { name: "name", type: "TEXT" },
+        { name: "email", type: "TEXT" },
+        { name: "is_pro", type: "INTEGER DEFAULT 1" },
+        { name: "paypal_handle", type: "TEXT" },
+        { name: "payout_provider", type: "TEXT DEFAULT 'paypal'" },
+        { name: "created_at", type: "TEXT" },
+      ];
+
+      for (const col of columnsToCheck) {
+        if (!existingCols.has(col.name.toLowerCase())) {
+          try {
+            await db.prepare(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}`).run();
+          } catch (e) {
+            console.warn(`Column migration skipped for ${col.name}:`, e);
+          }
+        }
+      }
+    }
   } catch (err) {
     console.warn("Users table initialization warning:", err);
   }
@@ -44,7 +73,7 @@ export async function POST(request: Request) {
     const body: any = await request.json();
     const { username, email, password, agreedToTerms, agreeTerms, terms, name } = body;
 
-    // 1. Validasi Terms of Service (Menerima agreedToTerms, agreeTerms, atau terms)
+    // 1. Validasi Terms of Service
     const isAgreed = Boolean(agreedToTerms || agreeTerms || terms || body.agree);
     if (!isAgreed) {
       return NextResponse.json(
@@ -93,7 +122,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // Masukkan akun baru ke D1
+      // Masukkan akun baru ke tabel users di D1
       await db
         .prepare(`
           INSERT INTO users (username, email, password, name, is_pro, created_at)
