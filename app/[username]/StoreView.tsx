@@ -31,6 +31,9 @@ import {
 import type { Product } from "@/lib/products";
 import type { StoreSettings } from "@/lib/storeSettings";
 
+const DEFAULT_BANNER = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80";
+const DEFAULT_PRODUCT_COVER = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80";
+
 interface StoreViewProps {
   username: string;
 }
@@ -50,6 +53,9 @@ export default function StoreView({ username }: StoreViewProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<StoreSettings | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Status proteksi jika file gambar gagal decode / corrupt Base64
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState("All Assets");
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,7 +77,6 @@ export default function StoreView({ username }: StoreViewProps) {
   useEffect(() => {
     async function loadStoreData() {
       try {
-        // 1. Hanya baca local storage cache jika secara spesifik milik username ini
         let localSettings: any = {};
         if (typeof window !== "undefined") {
           const keysToTry = [
@@ -91,7 +96,6 @@ export default function StoreView({ username }: StoreViewProps) {
           }
         }
 
-        // 2. Fetch from D1 API
         const [settingsRes, productsRes] = await Promise.all([
           fetch(`/api/settings?username=${username}`),
           fetch(`/api/products?username=${username}&public=true`)
@@ -100,7 +104,6 @@ export default function StoreView({ username }: StoreViewProps) {
         const settingsData: any = await settingsRes.json().catch(() => ({}));
         const productsData: any = await productsRes.json().catch(() => []);
 
-        // Gabungkan pengaturan API dengan local customization khusus user ini
         const mergedSettings: any = {
           ...localSettings,
           ...settingsData,
@@ -270,19 +273,24 @@ export default function StoreView({ username }: StoreViewProps) {
     });
   }, [products, selectedCategory, searchQuery]);
 
-  // Robust field normalization dengan fallback dinamis sesuai username
+  // Robust field normalization
   const formattedUsername = username 
     ? username.charAt(0).toUpperCase() + username.slice(1) 
     : "Creator";
   const defaultStoreName = `${formattedUsername} Store`;
 
-  const storeLogo = 
+  const rawLogo = 
     settings?.logoUrl || 
     (settings as any)?.logo_url || 
     (settings as any)?.storeLogo || 
     (settings as any)?.store_logo || 
     (settings as any)?.avatarUrl || 
     (settings as any)?.logo;
+
+  // Abaikan Base64 korup yang terlalu panjang langsung dari state
+  const storeLogo = (rawLogo && rawLogo.startsWith("data:") && rawLogo.length > 30000) 
+    ? "" 
+    : rawLogo;
 
   const storeTitleText = 
     settings?.storeTitle || 
@@ -291,7 +299,7 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.store_name || 
     defaultStoreName;
 
-  const heroBannerImage = 
+  const rawHeroBanner = 
     settings?.heroImageUrl || 
     (settings as any)?.bannerUrl || 
     (settings as any)?.hero_image_url || 
@@ -300,6 +308,10 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.banner_image_url || 
     (settings as any)?.heroImage ||
     (settings as any)?.banner;
+
+  const heroBannerImage = (rawHeroBanner && rawHeroBanner.startsWith("data:") && rawHeroBanner.length > 50000)
+    ? DEFAULT_BANNER
+    : (rawHeroBanner || DEFAULT_BANNER);
 
   const heroHeadlineText = 
     settings?.heroTitle || 
@@ -324,7 +336,6 @@ export default function StoreView({ username }: StoreViewProps) {
     (settings as any)?.badgeTagText || 
     "Featured Release";
 
-  // Robust visibility parser
   const checkIsActive = (val: any, fallback = true) => {
     if (val === undefined || val === null) return fallback;
     if (val === true || val === 1 || val === "1" || val === "active" || val === "visible" || val === "true") return true;
@@ -371,14 +382,15 @@ export default function StoreView({ username }: StoreViewProps) {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo */}
+          {/* Brand Identity & Logo with Anti-Broken Guard */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="shrink-0">
-              {storeLogo ? (
+              {storeLogo && !logoFailed ? (
                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-200/90 bg-white shadow-xs p-1 flex items-center justify-center">
                   <img
                     src={storeLogo}
                     alt={storeTitleText}
+                    onError={() => setLogoFailed(true)}
                     className="w-full h-full object-contain"
                   />
                 </div>
@@ -524,8 +536,11 @@ export default function StoreView({ username }: StoreViewProps) {
         <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-8">
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 text-white min-h-[300px] sm:min-h-[340px] flex items-center shadow-xl">
             <img
-              src={heroBannerImage || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80"}
+              src={heroBannerImage}
               alt="Hero Visual"
+              onError={(e) => {
+                e.currentTarget.src = DEFAULT_BANNER;
+              }}
               className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
                 hasHeroText ? "opacity-60" : "opacity-100"
               }`}
@@ -627,7 +642,7 @@ export default function StoreView({ username }: StoreViewProps) {
             </div>
           )}
 
-          {/* Product Cards Grid */}
+          {/* Product Cards Grid with Anti-Broken Fallback */}
           <div className={showBundle ? "lg:col-span-3" : "lg:col-span-1"}>
             {isLoading ? (
               <div className="bg-white rounded-3xl p-16 text-center border border-slate-200/80 shadow-xs">
@@ -656,11 +671,14 @@ export default function StoreView({ username }: StoreViewProps) {
                     key={product.id}
                     className="group flex flex-col bg-white rounded-3xl border border-slate-200/70 overflow-hidden transition-all duration-300 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-200/50"
                   >
-                    <div className="relative aspect-4/3 w-full bg-black overflow-hidden flex items-center justify-center">
+                    <div className="relative aspect-4/3 w-full bg-slate-900 overflow-hidden flex items-center justify-center">
                       <img
-                        src={product.coverUrl}
+                        src={product.coverUrl || DEFAULT_PRODUCT_COVER}
                         alt={product.title}
-                        className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_PRODUCT_COVER;
+                        }}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                       {product.badge && (
                         <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-xs bg-slate-900/90 backdrop-blur-xs text-white">
