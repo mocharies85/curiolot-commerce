@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getRequestContext } from "@cloudflare/next-on-pages";
+import { sendActivationEmail } from "@/app/api/auth/register/route";
 
 export const runtime = "edge";
 
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
 
     const cleanIdentifier = identifier.toLowerCase();
 
-    // 1. Kredensial Testing Admin Utama (Aries)
+    // 1. Bypass Akun Testing Admin (Aries)
     if (
       (cleanIdentifier === "aries" || cleanIdentifier === "mocharies85@gmail.com") &&
       password === "password123"
@@ -28,14 +29,9 @@ export async function POST(req: Request) {
         username: "aries",
         name: "Moch Aries",
         email: "mocharies85@gmail.com",
-        role: "admin",
       };
 
-      const response = NextResponse.json({
-        success: true,
-        user: adminUser,
-      });
-
+      const response = NextResponse.json({ success: true, user: adminUser });
       response.cookies.set({
         name: "curiolot_session",
         value: "aries",
@@ -44,9 +40,8 @@ export async function POST(req: Request) {
         httpOnly: false,
         secure: true,
         sameSite: "lax",
-        maxAge: 60 * 60 * 24 * 30, // 30 hari
+        maxAge: 60 * 60 * 24 * 30,
       });
-
       return response;
     }
 
@@ -60,7 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Cari pengguna berdasarkan email atau username (case-insensitive)
+    // 2. Query Pengguna di D1
     const user: any = await db
       .prepare(
         "SELECT * FROM users WHERE LOWER(email) = ? OR LOWER(username) = ? LIMIT 1"
@@ -76,7 +71,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Verifikasi Password (Mengecek password_hash dan password)
+    // 3. Verifikasi Password
     const storedPassword = user.password_hash || user.password;
     if (storedPassword && storedPassword !== password) {
       return NextResponse.json(
@@ -85,7 +80,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. KUNCI PENGAMAN: Blokir jika belum klik aktivasi email (Persis Curiolot Link)
+    // 4. Validasi Status Aktivasi
     const isActivated =
       user.username?.toLowerCase() === "aries" ||
       user.is_activated === 1 ||
@@ -94,6 +89,16 @@ export async function POST(req: Request) {
       user.isActivated === true;
 
     if (!isActivated) {
+      // Buat token baru & kirim ulang email aktivasi otomatis
+      const newToken = `token_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      await db
+        .prepare("UPDATE users SET verification_token = ? WHERE username = ?")
+        .bind(newToken, user.username)
+        .run()
+        .catch(() => {});
+
+      await sendActivationEmail(user.email, user.username, newToken);
+
       return NextResponse.json(
         {
           error:
@@ -103,7 +108,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Susun data pengguna yang valid
+    // 5. Login Berhasil
     const resolvedUsername = user.username || cleanIdentifier;
     const resolvedName = user.name || resolvedUsername;
 
@@ -114,11 +119,9 @@ export async function POST(req: Request) {
         username: resolvedUsername,
         name: resolvedName,
         email: user.email,
-        role: user.role || "creator",
       },
     });
 
-    // 6. Pasang cookie sesi lintas subdomain (.curiolot.com)
     response.cookies.set({
       name: "curiolot_session",
       value: String(resolvedUsername),
@@ -127,14 +130,14 @@ export async function POST(req: Request) {
       httpOnly: false,
       secure: true,
       sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30, // 30 hari
+      maxAge: 60 * 60 * 24 * 30,
     });
 
     return response;
   } catch (err: any) {
     console.error("Login API Error:", err);
     return NextResponse.json(
-      { error: "An unexpected server error occurred during sign in." },
+      { error: "An unexpected server error occurred." },
       { status: 500 }
     );
   }
