@@ -153,16 +153,27 @@ export default function LandingHomePage() {
           return;
         }
 
+        // Mengirimkan terms dan agreeTerms ke backend API
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: authName, email: authEmail, password: authPassword }),
+          body: JSON.stringify({ 
+            name: authName, 
+            email: authEmail, 
+            password: authPassword,
+            terms: true,
+            agreeTerms: true
+          }),
         });
 
         const data: any = await res.json().catch(() => ({}));
         if (!res.ok) {
           setAuthError(data?.error || "Registration failed. Please try again.");
           return;
+        }
+
+        if (typeof window !== "undefined" && data?.user) {
+          localStorage.setItem("curiolot_session", JSON.stringify(data.user));
         }
 
         setShowAuthModal(false);
@@ -500,7 +511,7 @@ export default function LandingHomePage() {
       {/* 5. Comparison Table */}
       <section id="comparison" className="py-20 max-w-4xl mx-auto px-4 sm:px-6">
         <div className="text-center space-y-3 mb-10">
-          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-950">
+          <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
             Why Creators Switch to Curiolot
           </h3>
           <p className="text-xs sm:text-sm text-slate-500">
@@ -560,7 +571,7 @@ export default function LandingHomePage() {
 
       {/* 7. Auth Modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
             <button
               onClick={() => setShowAuthModal(false)}
@@ -590,21 +601,30 @@ export default function LandingHomePage() {
             <div className="flex rounded-xl bg-slate-100 p-1 mb-5 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setAuthMode("login")}
+                onClick={() => {
+                  setAuthMode("login");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "login" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500"}`}
               >
                 Log In
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode("signup")}
+                onClick={() => {
+                  setAuthMode("signup");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "signup" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500"}`}
               >
                 Sign Up
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode("seller")}
+                onClick={() => {
+                  setAuthMode("seller");
+                  setAuthError("");
+                }}
                 className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "seller" ? "bg-white text-indigo-600 shadow-xs font-bold" : "text-slate-500"}`}
               >
                 Open Store
@@ -650,18 +670,34 @@ export default function LandingHomePage() {
                 />
               </div>
 
+              {/* Checkbox & Terms of Service dengan styling persis Curiolot Link */}
               {authMode === "signup" && (
-                <div className="flex items-start gap-2 text-left pt-1">
+                <div className="flex items-start gap-2.5 text-left pt-1">
                   <input
                     type="checkbox"
                     id="termsCheck"
                     checked={agreeTerms}
                     onChange={(e) => setAgreeTerms(e.target.checked)}
-                    className="mt-0.5"
+                    className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
                     required
                   />
-                  <label htmlFor="termsCheck" className="text-[11px] text-slate-500">
-                    I agree to the Terms of Service & Privacy Policy.
+                  <label htmlFor="termsCheck" className="text-xs text-slate-500 leading-snug cursor-pointer select-none">
+                    I have read and agree to the{" "}
+                    <Link
+                      href="/terms"
+                      target="_blank"
+                      className="font-semibold text-emerald-600 hover:text-emerald-700 underline transition-colors"
+                    >
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link
+                      href="/privacy"
+                      target="_blank"
+                      className="font-semibold text-emerald-600 hover:text-emerald-700 underline transition-colors"
+                    >
+                      Privacy Policy
+                    </Link>.
                   </label>
                 </div>
               )}
@@ -669,7 +705,7 @@ export default function LandingHomePage() {
               <button
                 type="submit"
                 disabled={isSubmittingAuth}
-                className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
+                className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 cursor-pointer disabled:opacity-50"
               >
                 {isSubmittingAuth ? "Processing..." : authMode === "login" ? "Log In" : "Continue"}
               </button>
