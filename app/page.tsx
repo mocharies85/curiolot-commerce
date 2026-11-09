@@ -146,14 +146,14 @@ export default function LandingHomePage() {
         return;
       }
 
+      // Registration Flow with Email Verification Barrier
       if (authMode === "signup") {
         if (!agreeTerms) {
-          setAuthError("You must agree to the Terms of Service to register.");
+          setAuthError("You must agree to the Terms of Service and Privacy Policy to register.");
           setIsSubmittingAuth(false);
           return;
         }
 
-        // Mengirimkan terms dan agreeTerms ke backend API
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -172,15 +172,20 @@ export default function LandingHomePage() {
           return;
         }
 
-        if (typeof window !== "undefined" && data?.user) {
-          localStorage.setItem("curiolot_session", JSON.stringify(data.user));
-        }
+        // Tahan sesi dan tampilkan instruksi aktivasi email
+        alert(
+          data?.message || 
+          `Verification link sent to ${authEmail}. Please check your inbox and activate your account before logging in.`
+        );
 
-        setShowAuthModal(false);
-        router.push("/dashboard");
+        // Alihkan tampilan ke tab Sign In
+        setAuthMode("login");
+        setAuthPassword("");
+        setAuthError("");
         return;
       }
 
+      // Login Flow
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -277,7 +282,7 @@ export default function LandingHomePage() {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
