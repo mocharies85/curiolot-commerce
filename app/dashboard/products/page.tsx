@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -16,9 +16,27 @@ import {
 } from "lucide-react";
 import type { Product } from "@/lib/products";
 
+const DEFAULT_COVER = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80";
+
 export default function YourProductsPage() {
   const router = useRouter();
-  const username = "aries";
+
+  // Dynamically resolve active username from browser session
+  const [username, setUsername] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const storedSession = localStorage.getItem("curiolot_session");
+      if (storedSession) {
+        try {
+          const parsed = JSON.parse(storedSession);
+          if (parsed?.username) return parsed.username.toLowerCase();
+          if (parsed?.name) return parsed.name.toLowerCase().replace(/\s+/g, "");
+          if (parsed?.email) return parsed.email.split("@")[0].toLowerCase();
+        } catch (e) {}
+      }
+    }
+    return "aries";
+  });
+
   const [products, setProducts] = useState<Product[]>([]);
   const [filterTab, setFilterTab] = useState<"all" | "active" | "hidden">("all");
   const [search, setSearch] = useState("");
@@ -28,23 +46,33 @@ export default function YourProductsPage() {
   const [isPro, setIsPro] = useState(true);
   const [showProUpgradeModal, setShowProUpgradeModal] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async (userToFetch = username) => {
+    if (!userToFetch) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
     try {
-      const res = await fetch(`/api/products?username=${username}`);
+      const res = await fetch(`/api/products?username=${encodeURIComponent(userToFetch)}`);
       const data = await res.json();
-      if (Array.isArray(data)) setProducts(data);
+      if (Array.isArray(data)) {
+        setProducts(data);
+      } else {
+        setProducts([]);
+      }
     } catch (err) {
       console.error("Failed to fetch products:", err);
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [username]);
 
   useEffect(() => {
-    fetchProducts();
+    fetchProducts(username);
 
     // Fetch official plan status from central database settings
-    fetch(`/api/settings?username=${username}`)
+    fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
         if (data) {
@@ -58,14 +86,13 @@ export default function YourProductsPage() {
         }
       })
       .catch((err) => console.error("Failed to load user plan settings:", err));
-  }, [username]);
+  }, [username, fetchProducts]);
 
   const handleEditClick = (item: Product) => {
     if (!isPro) {
       setShowProUpgradeModal(true);
       return;
     }
-    // Route to edit form with target product ID
     router.push(`/dashboard/new?edit=${item.id}`);
   };
 
@@ -170,7 +197,14 @@ export default function YourProductsPage() {
                 <tr key={item.id} className="hover:bg-slate-50/60 transition">
                   <td className="py-4 px-6 flex items-center gap-3">
                     <div className="w-12 h-12 rounded-xl bg-black overflow-hidden flex items-center justify-center shrink-0 border border-slate-200">
-                      <img src={item.coverUrl} alt={item.title} className="w-full h-full object-contain" />
+                      <img 
+                        src={item.coverUrl || DEFAULT_COVER} 
+                        alt={item.title}
+                        onError={(e) => {
+                          e.currentTarget.src = DEFAULT_COVER;
+                        }}
+                        className="w-full h-full object-contain" 
+                      />
                     </div>
                     <div>
                       <p className="font-bold text-slate-900">{item.title}</p>
@@ -222,7 +256,7 @@ export default function YourProductsPage() {
 
                       {/* Live Storefront Link */}
                       <Link
-                        href={`/${username}/${item.slug}`}
+                        href={`/${(item as any).username || username}/${item.slug}`}
                         target="_blank"
                         className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
                         title="View Live Product Page"
@@ -248,7 +282,7 @@ export default function YourProductsPage() {
         )}
       </div>
 
-      {/* Pro Plan Upgrade Modal (English) */}
+      {/* Pro Plan Upgrade Modal */}
       {showProUpgradeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5">
