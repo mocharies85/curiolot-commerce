@@ -95,8 +95,8 @@ export default function StoreView({ username }: StoreViewProps) {
         }
 
         const [settingsRes, productsRes] = await Promise.all([
-          fetch(`/api/settings?username=${username}`),
-          fetch(`/api/products?username=${username}&public=true`)
+          fetch(`/api/settings?username=${encodeURIComponent(username)}`),
+          fetch(`/api/products?username=${encodeURIComponent(username)}&public=true`)
         ]);
 
         const settingsData: any = await settingsRes.json().catch(() => ({}));
@@ -157,20 +157,19 @@ export default function StoreView({ username }: StoreViewProps) {
 
     try {
       if (authMode === "seller") {
-        alert(`Welcome to Curiolot Creators! Redirecting to setup store for "${authStoreName || "Your Store"}".`);
         setShowAuthModal(false);
         router.push("/dashboard");
         return;
       }
 
+      // Registration Flow with Verification Barrier
       if (authMode === "signup") {
         if (!agreeTerms) {
-          setAuthError("You must accept the Terms of Service and Privacy Policy to create an account.");
+          setAuthError("You must agree to the Terms of Service and Privacy Policy to create an account.");
           setIsSubmittingAuth(false);
           return;
         }
 
-        // Sertakan terms dan agreeTerms di payload registrasi
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -183,20 +182,23 @@ export default function StoreView({ username }: StoreViewProps) {
           }),
         });
 
-        const data: any = await res.json();
+        const data: any = await res.json().catch(() => ({}));
 
         if (!res.ok) {
           setAuthError(data?.error || "Failed to create account. Please try again.");
           return;
         }
 
-        if (typeof window !== "undefined") {
-          localStorage.setItem("curiolot_session", JSON.stringify(data?.user || { email: authEmail, name: authName }));
-        }
+        // Tahan sesi pendaftaran dan instruksikan aktivasi email
+        alert(
+          data?.message || 
+          `Verification link dispatched to ${authEmail}. Please check your inbox and activate your email before signing in.`
+        );
 
-        alert("Account registered successfully! Redirecting to your dashboard...");
-        setShowAuthModal(false);
-        router.push("/dashboard");
+        // Arahkan ke tab Sign In
+        setAuthMode("login");
+        setAuthPassword("");
+        setAuthError("");
         return;
       }
 
@@ -210,7 +212,7 @@ export default function StoreView({ username }: StoreViewProps) {
         }),
       });
 
-      const data: any = await res.json();
+      const data: any = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setAuthError(data?.error || "Invalid email or password. Please verify your credentials.");
