@@ -18,52 +18,15 @@ import {
   Tag, 
   Lock, 
   DollarSign,
-  Download
+  Download,
+  Loader2
 } from "lucide-react";
 import type { StoreSettings } from "@/lib/storeSettings";
 
 const DEFAULT_HERO_BANNER = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1600&q=80";
 
-// Helper: Compress high-res uploaded images to lightweight JPEG via Canvas
-const compressImage = (file: File, maxWidth: number, maxHeight: number, quality = 0.8): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-        if (height > maxHeight) {
-          width = Math.round((width * maxHeight) / height);
-          height = maxHeight;
-        }
-
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve(event.target?.result as string);
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.onerror = () => resolve(event.target?.result as string);
-    };
-    reader.onerror = (err) => reject(err);
-  });
-};
-
 export default function YourStorePage() {
-  // Ambil username secara dinamis dari session browser
+  // Dynamically resolve active username from browser session storage
   const [username, setUsername] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const storedSession = localStorage.getItem("curiolot_session");
@@ -76,12 +39,16 @@ export default function YourStorePage() {
         } catch (e) {}
       }
     }
-    return "vanth";
+    return "aries";
   });
 
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [saved, setSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Cloudflare R2 upload progress states
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
   const [uploadBannerName, setUploadBannerName] = useState<string | null>(null);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +130,64 @@ export default function YourStorePage() {
       .catch((err) => console.error("Failed to load settings:", err));
   }, [username, defaultStoreTitle]);
 
+  // Upload logo directly to Cloudflare R2 bucket (curiolot-media)
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("username", username);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to upload logo to R2");
+
+      setSettings((prev) => ({ ...prev, logoUrl: data.url }));
+    } catch (err: any) {
+      console.error("Upload logo failed:", err);
+      alert("Failed to upload logo: " + (err.message || "Network error"));
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  // Upload banner directly to Cloudflare R2 bucket (curiolot-media)
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadBannerName(file.name);
+    setIsUploadingBanner(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("username", username);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to upload banner to R2");
+
+      setSettings((prev) => ({ ...prev, heroImageUrl: data.url }));
+    } catch (err: any) {
+      console.error("Upload banner failed:", err);
+      alert("Failed to upload banner: " + (err.message || "Network error"));
+    } finally {
+      setIsUploadingBanner(false);
+    }
+  };
+
+  // Synchronize bundle checkout link with active payment gateway
   const autoLockedBundlePaymentUrl = useMemo(() => {
     if (settings.bundleUrl && !settings.bundleUrl.includes("buy.stripe.com/test_demo")) {
       return settings.bundleUrl;
@@ -213,31 +238,6 @@ export default function YourStorePage() {
       return (words[0][0] + words[1][0]).toUpperCase();
     }
     return raw.slice(0, 2).toUpperCase();
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const compressed = await compressImage(file, 256, 256, 0.85);
-      setSettings((prev) => ({ ...prev, logoUrl: compressed }));
-    } catch (err) {
-      console.error("Failed to compress logo:", err);
-    }
-  };
-
-  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadBannerName(file.name);
-    try {
-      const compressed = await compressImage(file, 1400, 500, 0.8);
-      setSettings((prev) => ({ ...prev, heroImageUrl: compressed }));
-    } catch (err) {
-      console.error("Failed to compress banner:", err);
-    }
   };
 
   const handleResetBanner = () => {
@@ -391,11 +391,21 @@ export default function YourStorePage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      disabled={isUploadingLogo}
                       onClick={() => logoInputRef.current?.click()}
-                      className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
                     >
-                      <UploadCloud className="w-3.5 h-3.5" />
-                      <span>Upload Logo</span>
+                      {isUploadingLogo ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Uploading to R2...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Upload Logo</span>
+                        </>
+                      )}
                     </button>
 
                     {settings.logoUrl && (
@@ -412,10 +422,10 @@ export default function YourStorePage() {
 
                   <input
                     type="url"
-                    placeholder="Or paste direct image URL (https://...)"
+                    placeholder="Direct image URL (https://pub-af30dd30344d4c978a0b58579942823d.r2.dev/...)"
                     value={settings.logoUrl || ""}
                     onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-white text-[11px] rounded-lg border border-slate-200 focus:outline-none focus:border-slate-900 transition"
+                    className="w-full px-3 py-1.5 bg-white text-[11px] rounded-lg border border-slate-200 focus:outline-none focus:border-slate-900 transition font-mono"
                   />
                 </div>
               </div>
@@ -557,7 +567,7 @@ export default function YourStorePage() {
                         setSettings({ ...settings, heroImageUrl: e.target.value });
                         setUploadBannerName(null);
                       }}
-                      placeholder="Paste image URL (https://...)"
+                      placeholder="Direct image URL (https://pub-af30dd30344d4c978a0b58579942823d.r2.dev/...)"
                       className="w-full pl-9 pr-10 py-2 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-slate-900 transition font-mono"
                     />
                     {isCustomBanner && (
@@ -584,11 +594,20 @@ export default function YourStorePage() {
                     onClick={() => bannerInputRef.current?.click()}
                     className="border-2 border-dashed border-slate-200 hover:border-slate-400 bg-slate-50/70 hover:bg-slate-100/50 rounded-2xl p-4 text-center cursor-pointer transition flex flex-col items-center justify-center gap-1 group"
                   >
-                    <UploadCloud className="w-4 h-4 text-indigo-600 group-hover:scale-105 transition" />
-                    <p className="text-xs font-bold text-slate-800">
-                      {uploadBannerName ? `Selected: ${uploadBannerName}` : "Click to upload banner background image"}
-                    </p>
-                    <p className="text-[10px] text-slate-400">Auto-compressed safely for instant database synchronization</p>
+                    {isUploadingBanner ? (
+                      <>
+                        <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                        <p className="text-xs font-bold text-slate-800">Uploading banner to Cloudflare R2...</p>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-4 h-4 text-indigo-600 group-hover:scale-105 transition" />
+                        <p className="text-xs font-bold text-slate-800">
+                          {uploadBannerName ? `Selected: ${uploadBannerName}` : "Click to upload banner background image"}
+                        </p>
+                        <p className="text-[10px] text-slate-400">Directly uploaded and hosted on Cloudflare R2 (curiolot-media)</p>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
