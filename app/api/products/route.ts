@@ -3,46 +3,126 @@ import { getRequestContext } from "@cloudflare/next-on-pages";
 
 export const runtime = "edge";
 
+// Helper: Ensure store_products table exists in D1
+async function ensureStoreProductsTable(db: any) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS store_products (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        username TEXT,
+        title TEXT,
+        slug TEXT,
+        category TEXT,
+        description TEXT,
+        price REAL DEFAULT 0,
+        original_price REAL,
+        currency TEXT DEFAULT 'USD',
+        file_format TEXT,
+        file_size TEXT,
+        cover_image_url TEXT,
+        cover_url TEXT,
+        badge TEXT,
+        payment_url TEXT,
+        whats_inside TEXT,
+        file_url TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+      )
+    `).run();
+  } catch (err) {
+    console.warn("Table store_products creation warning:", err);
+  }
+}
+
 // Helper: Ensure crucial columns exist in D1 store_products table
 async function ensureRequiredColumns(db: any, colNames: Set<string>) {
-  if (colNames.size > 0 && !colNames.has("whats_inside")) {
-    try {
-      await db.prepare("ALTER TABLE store_products ADD COLUMN whats_inside TEXT").run();
-      colNames.add("whats_inside");
-    } catch {
-      // Column might already exist or ALTER is restricted
-    }
-  }
-  if (colNames.size > 0 && !colNames.has("updated_at")) {
-    try {
-      await db.prepare("ALTER TABLE store_products ADD COLUMN updated_at TEXT").run();
-      colNames.add("updated_at");
-    } catch {
-      // Ignore fallback
+  const columnsToAdd = [
+    { name: "whats_inside", type: "TEXT" },
+    { name: "updated_at", type: "TEXT" },
+    { name: "username", type: "TEXT" },
+    { name: "cover_image_url", type: "TEXT" },
+    { name: "cover_url", type: "TEXT" },
+    { name: "is_active", type: "INTEGER DEFAULT 1" },
+  ];
+
+  for (const col of columnsToAdd) {
+    if (colNames.size > 0 && !colNames.has(col.name.toLowerCase())) {
+      try {
+        await db.prepare(`ALTER TABLE store_products ADD COLUMN ${col.name} ${col.type}`).run();
+        colNames.add(col.name.toLowerCase());
+      } catch {
+        // Column might already exist or ALTER is restricted
+      }
     }
   }
 }
 
-// 1. GET: Fetch product catalog for storefront and dashboard
+// 1. GET: Fetch product catalog for storefront, dashboard, and marketplace
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const username = searchParams.get("username") || "aries";
+    const usernameParam = searchParams.get("username");
+    const isAll = searchParams.get("all") === "true";
+    const isPublic = searchParams.get("public") === "true";
+    const targetSlug = searchParams.get("slug");
+    const targetId = searchParams.get("id");
 
     const { env } = getRequestContext();
-    const db = (env as any).DB;
+    const db = (env as any)?.DB;
 
     if (!db) {
       console.warn("D1 Database binding 'DB' not detected.");
       return NextResponse.json([]);
     }
 
-    const { results } = await db
-      .prepare(
-        "SELECT * FROM store_products WHERE username = ? ORDER BY created_at DESC"
-      )
-      .bind(username)
-      .all();
+    await ensureStoreProductsTable(db);
+
+    let query = "SELECT * FROM store_products";
+    const params: any[] = [];
+    const conditions: string[] = [];
+
+    // Filter 1: Ambil produk berdasarkan ID spesifik
+    if (targetId) {
+      conditions.push("id = ?");
+      params.push(targetId);
+    } 
+    // Filter 2: Ambil produk berdasarkan SLUG spesifik
+    else if (targetSlug) {
+      conditions.push("LOWER(slug) = LOWER(?)");
+      params.push(targetSlug.trim());
+      if (usernameParam) {
+        conditions.push("LOWER(username) = LOWER(?)");
+        params.push(usernameParam.trim());
+      }
+    } 
+    // Filter 3: Marketplace publik (Semua produk aktif dari semua kreator)
+    else if (isAll) {
+      conditions.push("(is_active = 1 OR is_active IS NULL)");
+    } 
+    // Filter 4: Produk milik kreator tertentu (Dashboard atau Toko Publik)
+    else if (usernameParam && usernameParam.trim() !== "") {
+      conditions.push("LOWER(username) = LOWER(?)");
+      params.push(usernameParam.trim());
+
+      // Jika diakses oleh publik, hanya tampilkan produk aktif
+      if (isPublic) {
+        conditions.push("(is_active = 1 OR is_active IS NULL)");
+      }
+    } 
+    // KUNCI PENGAMAN: Jika tidak ada username dan bukan all, JANGAN fallback ke "aries"! Kembalikan []
+    else {
+      return NextResponse.json([]);
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    query += " ORDER BY created_at DESC";
+
+    const { results } = await db.prepare(query).bind(...params).all().catch(() => ({ results: [] }));
 
     if (!results || results.length === 0) {
       return NextResponse.json([]);
@@ -57,18 +137,22 @@ export async function GET(req: Request) {
         category: row.category,
         description: row.description || "",
         price: Number(row.price) || 0,
-        originalPrice: row.original_price ? Number(row.original_price) : undefined,
+        originalPrice: row.original_price ? Number(row.original_price) : (row.originalPrice ? Number(row.originalPrice) : undefined),
         currency: row.currency || "USD",
-        fileFormat: row.file_format,
-        fileSize: row.file_size,
-        coverUrl: row.cover_image_url || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+        fileFormat: row.file_format || row.fileFormat || "PDF",
+        fileSize: row.file_size || row.fileSize || "4.5 MB",
+        coverUrl: row.cover_image_url || row.cover_url || row.coverUrl || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
         badge: row.badge || undefined,
-        paymentUrl: row.payment_url || undefined,
+        paymentUrl: row.payment_url || row.paymentUrl || undefined,
         whatsInside: insideText,
         whats_inside: insideText,
-        features: insideText ? insideText.split("\n").filter((item: string) => item.trim() !== "") : [],
-        fileUrl: row.file_url || row.download_url || undefined,
-        isActive: Boolean(row.is_active === 1 || row.is_active === true),
+        features: typeof insideText === "string" 
+          ? insideText.split("\n").filter((item: string) => item.trim() !== "") 
+          : (Array.isArray(insideText) ? insideText : []),
+        fileUrl: row.file_url || row.download_url || row.fileUrl || undefined,
+        username: row.username || "",
+        userId: row.user_id || row.userId || undefined,
+        isActive: Boolean(row.is_active === 1 || row.is_active === true || row.is_active === undefined),
       };
     });
 
@@ -83,7 +167,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const { env } = getRequestContext();
-    const db = (env as any).DB;
+    const db = (env as any)?.DB;
 
     if (!db) {
       return NextResponse.json(
@@ -92,23 +176,27 @@ export async function POST(req: Request) {
       );
     }
 
+    await ensureStoreProductsTable(db);
     const body: any = await req.json();
 
     if (!body.title) {
       return NextResponse.json({ error: "Product title is required." }, { status: 400 });
     }
 
-    const username = body.username || "aries";
+    // KUNCI PENGAMAN: Ambil username pembuat asli, jangan pernah fallback ke 'aries'
+    const username = (body.username || "").trim().toLowerCase();
+    if (!username) {
+      return NextResponse.json({ error: "Username is required to create a product." }, { status: 400 });
+    }
 
-    // Satisfy user_id NOT NULL constraint
     let userId = body.userId || body.user_id;
     if (!userId) {
       try {
         const userRow: any = await db
-          .prepare("SELECT id FROM users WHERE username = ? LIMIT 1")
+          .prepare("SELECT username FROM users WHERE LOWER(username) = ? LIMIT 1")
           .bind(username)
           .first();
-        userId = userRow?.id || username;
+        userId = userRow?.username || username;
       } catch {
         userId = username;
       }
@@ -120,7 +208,9 @@ export async function POST(req: Request) {
     const category = body.category || "E-Books & Guides";
     const description = body.description || "";
     const price = Number(body.price) || 0;
-    const originalPrice = body.originalPrice ? Number(body.originalPrice) : (body.original_price ? Number(body.original_price) : null);
+    const originalPrice = body.originalPrice !== undefined && body.originalPrice !== null && body.originalPrice !== ""
+      ? Number(body.originalPrice)
+      : (body.original_price ? Number(body.original_price) : null);
     const currency = body.currency || "USD";
     const fileFormat = body.fileFormat || body.file_format || "PDF";
     const fileSize = body.fileSize || body.file_size || "4.5 MB";
@@ -128,7 +218,6 @@ export async function POST(req: Request) {
     const badge = body.badge || null;
     const paymentUrl = body.paymentUrl || body.payment_url || null;
 
-    // Resolve multiline What's Inside content
     const whatsInside = typeof body.whatsInside === "string" 
       ? body.whatsInside 
       : (typeof body.whats_inside === "string" 
@@ -137,7 +226,6 @@ export async function POST(req: Request) {
 
     const fileUrl = body.fileUrl || body.downloadUrl || body.file_url || null;
 
-    // Detect and dynamically adapt to D1 table columns
     let colNames = new Set<string>();
     try {
       const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
@@ -161,12 +249,18 @@ export async function POST(req: Request) {
       description,
       price,
       original_price: originalPrice,
+      originalPrice: originalPrice,
       currency,
       file_format: fileFormat,
+      fileFormat: fileFormat,
       file_size: fileSize,
+      fileSize: fileSize,
       cover_image_url: coverImageUrl,
+      cover_url: coverImageUrl,
+      coverUrl: coverImageUrl,
       badge,
       payment_url: paymentUrl,
+      paymentUrl: paymentUrl,
       whats_inside: whatsInside,
       features: whatsInside,
       file_url: fileUrl,
@@ -208,11 +302,11 @@ export async function POST(req: Request) {
   }
 }
 
-// 3. PUT: Update an existing product (Edit Mode)
+// 3. PUT: Update an existing product
 export async function PUT(req: Request) {
   try {
     const { env } = getRequestContext();
-    const db = (env as any).DB;
+    const db = (env as any)?.DB;
 
     if (!db) {
       return NextResponse.json(
@@ -241,14 +335,12 @@ export async function PUT(req: Request) {
     const badge = body.badge || null;
     const paymentUrl = body.paymentUrl || body.payment_url || null;
 
-    // Resolve multiline What's Inside content
     const whatsInside = typeof body.whatsInside === "string" 
       ? body.whatsInside 
       : (typeof body.whats_inside === "string" 
           ? body.whats_inside 
           : (Array.isArray(body.features) ? body.features.join("\n") : null));
 
-    // Detect and dynamically adapt to D1 table columns
     let colNames = new Set<string>();
     try {
       const { results: tableCols } = await db.prepare("PRAGMA table_info(store_products)").all();
@@ -271,6 +363,7 @@ export async function PUT(req: Request) {
       file_format: fileFormat,
       file_size: fileSize,
       cover_image_url: coverImageUrl,
+      cover_url: coverImageUrl,
       badge,
       payment_url: paymentUrl,
       whats_inside: whatsInside,
@@ -316,7 +409,7 @@ export async function PUT(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const { env } = getRequestContext();
-    const db = (env as any).DB;
+    const db = (env as any)?.DB;
 
     if (!db) {
       return NextResponse.json({ error: "DB binding not found." }, { status: 500 });
@@ -343,20 +436,30 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const { env } = getRequestContext();
-    const db = (env as any).DB;
+    const db = (env as any)?.DB;
 
     if (!db) {
       return NextResponse.json({ error: "DB binding not found." }, { status: 500 });
     }
 
-    const body: any = await req.json();
-    if (!body.id) {
+    let id: string | null = null;
+    try {
+      const body: any = await req.json();
+      id = body?.id;
+    } catch {}
+
+    if (!id) {
+      const { searchParams } = new URL(req.url);
+      id = searchParams.get("id");
+    }
+
+    if (!id) {
       return NextResponse.json({ error: "Product ID is required." }, { status: 400 });
     }
 
     await db
       .prepare("DELETE FROM store_products WHERE id = ?")
-      .bind(body.id)
+      .bind(id)
       .run();
 
     return NextResponse.json({ success: true, message: "Product deleted successfully" });
