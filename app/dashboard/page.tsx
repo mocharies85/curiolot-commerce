@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { 
@@ -19,20 +19,44 @@ import {
 } from "lucide-react";
 import type { Product } from "@/lib/products";
 
+const DEFAULT_COVER = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80";
+
 export default function DashboardPage() {
   const router = useRouter();
-  const username = "aries";
+
+  // Dynamically resolve active username from browser session
+  const [username, setUsername] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("curiolot_session");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed?.username) return parsed.username.toLowerCase();
+          if (parsed?.name) return parsed.name.toLowerCase().replace(/\s+/g, "");
+          if (parsed?.email) return parsed.email.split("@")[0].toLowerCase();
+        } catch (e) {}
+      }
+    }
+    return "";
+  });
 
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isPro, setIsPro] = useState(true);
 
-  // Fetch product inventory and user plan settings
-  const fetchDashboardData = async () => {
+  // Fetch product inventory and user plan settings based on active user session
+  const fetchDashboardData = useCallback(async (activeUser = username) => {
+    if (!activeUser) {
+      setProducts([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const [productsRes, settingsRes] = await Promise.all([
-        fetch(`/api/products?username=${username}`),
-        fetch(`/api/settings?username=${username}`),
+        fetch(`/api/products?username=${encodeURIComponent(activeUser)}`),
+        fetch(`/api/settings?username=${encodeURIComponent(activeUser)}`),
       ]);
 
       const productsData: any = await productsRes.json().catch(() => []);
@@ -40,6 +64,8 @@ export default function DashboardPage() {
 
       if (Array.isArray(productsData)) {
         setProducts(productsData);
+      } else {
+        setProducts([]);
       }
 
       if (settingsData) {
@@ -51,14 +77,15 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
+      setProducts([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [username]);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData(username);
+  }, [username, fetchDashboardData]);
 
   // Permanently delete product record
   const handleDelete = async (id: string, title: string) => {
@@ -75,7 +102,7 @@ export default function DashboardPage() {
       });
     } catch (err) {
       console.error("Failed to delete product:", err);
-      fetchDashboardData(); // Rollback on failure
+      fetchDashboardData(username); // Rollback on failure
     }
   };
 
@@ -94,12 +121,12 @@ export default function DashboardPage() {
       });
     } catch (err) {
       console.error("Failed to update product visibility status:", err);
-      fetchDashboardData();
+      fetchDashboardData(username);
     }
   };
 
   const totalDownloads = products.reduce((acc, p) => acc + (p.downloads || 0), 0);
-  const activeProducts = products.filter((p) => p.isActive).length;
+  const activeProducts = products.filter((p) => p.isActive !== false).length;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-24 font-sans antialiased">
@@ -127,7 +154,7 @@ export default function DashboardPage() {
             </span>
 
             <Link
-              href={`/${username}`}
+              href={`/${username || "aries"}`}
               target="_blank"
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 px-3.5 py-1.5 rounded-full transition"
             >
@@ -245,8 +272,11 @@ export default function DashboardPage() {
                     <tr key={p.id} className="hover:bg-slate-50/70 transition">
                       <td className="py-4 px-6 flex items-center gap-3">
                         <img
-                          src={p.coverUrl}
+                          src={p.coverUrl || DEFAULT_COVER}
                           alt={p.title}
+                          onError={(e) => {
+                            e.currentTarget.src = DEFAULT_COVER;
+                          }}
                           className="w-10 h-10 rounded-xl object-contain bg-black border border-slate-200/80 shrink-0"
                         />
                         <div>
@@ -286,7 +316,7 @@ export default function DashboardPage() {
 
                           {/* Preview Public Page */}
                           <Link
-                            href={`/${username}/${p.slug}`}
+                            href={`/${(p as any).username || username || "aries"}/${p.slug}`}
                             target="_blank"
                             className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
                             title="Preview Public Page"
