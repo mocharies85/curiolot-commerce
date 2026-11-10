@@ -3,7 +3,7 @@ export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { getRequestContext } from "@cloudflare/next-on-pages";
 
-// 1. Helper Auto-Migrate Tabel D1 Users
+// 1. Helper Auto-Migrate Tabel D1 Users (Default Free Creator)
 async function ensureUsersTable(db: any) {
   try {
     await db.prepare(`
@@ -13,7 +13,8 @@ async function ensureUsersTable(db: any) {
         password TEXT,
         password_hash TEXT,
         name TEXT,
-        is_pro INTEGER DEFAULT 1,
+        plan TEXT DEFAULT 'free',
+        is_pro INTEGER DEFAULT 0,
         is_activated INTEGER DEFAULT 0,
         verification_token TEXT,
         paypal_handle TEXT,
@@ -33,7 +34,8 @@ async function ensureUsersTable(db: any) {
         { name: "password_hash", type: "TEXT" },
         { name: "password", type: "TEXT" },
         { name: "name", type: "TEXT" },
-        { name: "is_pro", type: "INTEGER DEFAULT 1" },
+        { name: "plan", type: "TEXT DEFAULT 'free'" },
+        { name: "is_pro", type: "INTEGER DEFAULT 0" },
         { name: "is_activated", type: "INTEGER DEFAULT 0" },
         { name: "verification_token", type: "TEXT" },
         { name: "created_at", type: "TEXT" },
@@ -53,7 +55,7 @@ async function ensureUsersTable(db: any) {
 }
 
 // 2. Helper Kirim Email Aktivasi Resmi Curiolot via Resend API
-async function sendActivationEmail(email: string, username: string, token: string) {
+export async function sendActivationEmail(email: string, username: string, token: string) {
   const activationUrl = `https://store.curiolot.com/api/verify?token=${token}`;
 
   const emailHtml = `
@@ -218,10 +220,17 @@ export async function POST(request: Request) {
         fields.push("name");
         values.push(rawName);
       }
+
+      // SET AKUN BARU SEBAGAI FREE TIER
       if (existingCols.has("is_pro")) {
         fields.push("is_pro");
-        values.push(1);
+        values.push(0); // 0 = Free Tier
       }
+      if (existingCols.has("plan")) {
+        fields.push("plan");
+        values.push("free"); // plan = 'free'
+      }
+
       if (existingCols.has("created_at")) {
         fields.push("created_at");
         values.push(new Date().toISOString());
