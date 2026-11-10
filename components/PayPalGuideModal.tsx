@@ -10,7 +10,8 @@ import {
   CheckCircle2, 
   Zap, 
   ShieldCheck, 
-  Settings
+  Settings,
+  Mail
 } from "lucide-react";
 
 interface PayPalGuideModalProps {
@@ -24,7 +25,6 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
 
   if (!isOpen) return null;
 
-  // Sanitasi username agar selalu huruf kecil dan tidak kosong
   const cleanUsername = username?.trim().toLowerCase() || "aries";
   const downloadUrl = `https://store.curiolot.com/${cleanUsername}/success`;
 
@@ -46,7 +46,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
             </div>
             <div>
               <h2 className="text-lg font-extrabold text-white">PayPal Business Automation Guide</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Step-by-step setup for instant file delivery & card checkouts</p>
+              <p className="text-xs text-slate-400 mt-0.5">Setup instant payouts & automated redirect to customer download page</p>
             </div>
           </div>
           <button
@@ -67,11 +67,11 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
                 <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">1</span>
                 Your Personal Return & Download URL
               </span>
-              <span className="text-[10px] text-slate-500">From dashboard header</span>
+              <span className="text-[10px] text-slate-500">Curiolot Success Route</span>
             </div>
             
             <p className="text-slate-400 text-[11px]">
-              Copy this URL now. You must paste it into your PayPal Website Preferences in Step 3 so buyers are redirected to their download page.
+              Salin URL ini. Anda wajib menempelkannya pada kolom <strong>Return URL</strong> di menu Website Preferences PayPal (Langkah 3).
             </p>
 
             <div className="flex items-center gap-2">
@@ -94,7 +94,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
             <div className="flex items-center justify-between">
               <span className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">2</span>
-                Open Website Payment Preferences in PayPal
+                Buka Website Payment Preferences di PayPal
               </span>
               <a
                 href="https://www.paypal.com/businessprofile/settings/website"
@@ -102,21 +102,21 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
                 rel="noreferrer"
                 className="text-[11px] text-sky-400 hover:underline inline-flex items-center gap-1 font-semibold"
               >
-                <span>Direct Link</span>
+                <span>Direct Link Preferensi</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-800 space-y-2 text-slate-300">
               <p>
-                1. Log in to your{" "}
+                1. Login ke akun{" "}
                 <a href="https://www.paypal.com" target="_blank" rel="noreferrer" className="text-sky-400 font-semibold underline inline-flex items-center gap-0.5">
-                  PayPal Business Account <ExternalLink className="w-3 h-3" />
-                </a>.
+                  PayPal Business <ExternalLink className="w-3 h-3" />
+                </a> Anda.
               </p>
-              <p>2. Click the <strong>Settings (Gear Icon)</strong> in the top-right corner &rarr; <strong>Account Settings</strong>.</p>
-              <p>3. In the left sidebar under <strong>PRODUCTS & SERVICES</strong>, click <strong>Website payments</strong>.</p>
-              <p>4. Next to <strong>Website preferences</strong>, click the <strong>Update</strong> button.</p>
+              <p>2. Klik ikon <strong>Settings (Gerigi)</strong> di pojok kanan atas &rarr; pilih <strong>Account Settings</strong>.</p>
+              <p>3. Di menu bilah kiri, klik <strong>Website payments</strong>.</p>
+              <p>4. Cari baris <strong>Website preferences</strong>, lalu klik tombol <strong>Update</strong>.</p>
             </div>
           </div>
 
@@ -124,7 +124,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
           <div className="space-y-3">
             <span className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">3</span>
-              Apply the Required Configuration
+              Konfigurasi Wajib di PayPal
             </span>
 
             <div className="space-y-3">
@@ -132,8 +132,8 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Auto Return for Website Payments: <span className="text-emerald-400 font-extrabold">TURN ON</span></p>
-                  <p className="text-slate-400 text-[11px]">Paste your copied Download URL into the <strong>Return URL</strong> field and click <strong>Save</strong>.</p>
+                  <p className="font-bold text-white text-xs">Auto Return for Website Payments: <span className="text-emerald-400 font-extrabold">TURN ON (Aktifkan)</span></p>
+                  <p className="text-slate-400 text-[11px]">Tempelkan URL dari Langkah 1 ke kolom <strong>Return URL</strong> lalu klik <strong>Save</strong>.</p>
                 </div>
               </div>
 
@@ -141,8 +141,8 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Payment Data Transfer (PDT): <span className="text-emerald-400 font-extrabold">TURN ON</span></p>
-                  <p className="text-slate-400 text-[11px]">Enables secure transmission of transaction confirmation tokens back to your store.</p>
+                  <p className="font-bold text-white text-xs">Payment Data Transfer (PDT): <span className="text-emerald-400 font-extrabold">TURN ON (Aktifkan)</span></p>
+                  <p className="text-slate-400 text-[11px]">Memastikan token verifikasi transaksi terkirim otomatis kembali ke Curiolot.</p>
                 </div>
               </div>
 
@@ -150,9 +150,9 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-amber-200 text-xs">Block Non-Encrypted Website Payments: <span className="text-amber-400 underline font-extrabold">TURN OFF</span></p>
+                  <p className="font-bold text-amber-200 text-xs">Block Non-Encrypted Website Payments: <span className="text-amber-400 underline font-extrabold">TURN OFF (Nonaktifkan)</span></p>
                   <p className="text-amber-200/80 text-[11px]">
-                    <strong>CRITICAL:</strong> If this is kept Active, PayPal will reject all customer checkouts from your store. Keep it <strong>OFF (Nonaktif)</strong>.
+                    <strong>PENTING:</strong> Jika opsi ini tetap ON, PayPal akan memblokir link pembelian dari toko Anda. Pastikan posisinya <strong>OFF</strong>.
                   </p>
                 </div>
               </div>
@@ -161,44 +161,38 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <Zap className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">PayPal Account Optional: <span className="text-sky-400 font-extrabold">TURN ON</span></p>
-                  <p className="text-slate-400 text-[11px]">Allows global customers to pay via Credit/Debit card without creating a PayPal account.</p>
-                </div>
-              </div>
-
-              {/* Phone & Express Checkout */}
-              <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
-                <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Contact Phone & Express Checkout: <span className="text-slate-400 font-extrabold">TURN OFF</span></p>
-                  <p className="text-slate-400 text-[11px]">Removes friction for buyers by skipping unnecessary phone and bank transfer prompts.</p>
+                  <p className="font-bold text-white text-xs">PayPal Account Optional: <span className="text-sky-400 font-extrabold">TURN ON (Aktifkan)</span></p>
+                  <p className="text-slate-400 text-[11px]">Mengizinkan pembeli luar negeri membayar menggunakan Kartu Kredit / Debit tanpa harus mendaftar akun PayPal.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* STEP 4: Curiolot Store Handle */}
+          {/* STEP 4: PayPal Account Email */}
           <div className="p-4 rounded-2xl bg-sky-950/30 border border-sky-800/40 space-y-2">
             <span className="font-bold text-sky-300 text-xs uppercase tracking-wider flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">4</span>
-              Final Step: Save Global Gateway
+              Langkah Terakhir: Masukkan Email PayPal di Dashboard Curiolot
             </span>
-            <p className="text-sky-200/80 text-[11px]">
-              Ensure your clean PayPal.Me username (without https://) is saved in the input field above, then click <strong>Save Global Gateway Configuration</strong>.
-            </p>
+            <div className="flex items-start gap-2 pt-1">
+              <Mail className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+              <p className="text-sky-200/90 text-[11px] leading-relaxed">
+                Pastikan Anda memasukkan <strong>Alamat Email PayPal Bisnis</strong> Anda (contoh: <code className="bg-sky-900/50 px-1 py-0.5 rounded text-white font-mono">nama@email.com</code>) pada menu <strong>Earnings / Settings</strong>, bukan username biasa. Pembayaran pembeli akan langsung disetorkan ke email tersebut secara instan.
+              </p>
+            </div>
           </div>
 
         </div>
 
         {/* Footer Actions */}
         <div className="p-4 sm:p-5 border-t border-slate-800 bg-slate-900/90 flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-slate-500">Settings save immediately inside PayPal.</span>
+          <span className="text-[11px] text-slate-500">Perubahan di akun PayPal tersimpan secara instan.</span>
           <button
             type="button"
             onClick={onClose}
             className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition active:scale-95 cursor-pointer"
           >
-            Done & Close
+            Selesai & Tutup
           </button>
         </div>
 
