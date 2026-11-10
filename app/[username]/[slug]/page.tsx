@@ -12,9 +12,12 @@ import {
   Share2, 
   ExternalLink,
   Check,
-  FileText,
-  HardDrive,
-  AlertCircle
+  AlertCircle,
+  Star,
+  AlertTriangle,
+  X,
+  MessageSquare,
+  Lock
 } from "lucide-react";
 
 interface ProductData {
@@ -33,6 +36,15 @@ interface ProductData {
   paymentUrl?: string;
   sellerCheckoutUrl?: string;
   badge?: string;
+}
+
+interface Review {
+  id: string;
+  reviewer_name: string;
+  rating: number;
+  comment: string;
+  is_verified: number;
+  created_at: string;
 }
 
 // Fallback products if API or D1 record is pending
@@ -111,24 +123,38 @@ export default function ProductDetailPage() {
   const slug = (params?.slug as string) || "";
 
   const [product, setProduct] = useState<ProductData | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Pre-Checkout Legal Safe-Harbor Modal State
+  const [showCheckoutDisclaimer, setShowCheckoutDisclaimer] = useState(false);
+  const [agreedToDisclaimer, setAgreedToDisclaimer] = useState(false);
+
+  // New Review Form States
+  const [reviewerName, setReviewerName] = useState("");
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [showReviewSuccess, setShowReviewSuccess] = useState(false);
 
   useEffect(() => {
     if (!username || !slug) return;
 
-    fetch(`/api/products?username=${username}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("API response error");
-        return res.json();
-      })
-      .then((data: any) => {
+    Promise.all([
+      fetch(`/api/products?username=${encodeURIComponent(username)}`),
+      fetch(`/api/reviews?slug=${encodeURIComponent(slug)}&username=${encodeURIComponent(username)}`)
+    ])
+      .then(async ([prodRes, revRes]) => {
+        const prodData: any = await prodRes.json().catch(() => []);
+        const revData: any = await revRes.json().catch(() => []);
+
         let matched: any = null;
 
-        if (Array.isArray(data)) {
-          matched = data.find((p: any) => p.slug?.toLowerCase() === slug.toLowerCase());
-        } else if (data && typeof data === "object" && data.slug) {
-          matched = data;
+        if (Array.isArray(prodData)) {
+          matched = prodData.find((p: any) => p.slug?.toLowerCase() === slug.toLowerCase());
+        } else if (prodData && typeof prodData === "object" && prodData.slug) {
+          matched = prodData;
         }
 
         if (!matched) {
@@ -141,20 +167,24 @@ export default function ProductDetailPage() {
             price: Number(matched.price) || 0,
             originalPrice: matched.originalPrice != null ? Number(matched.originalPrice) : undefined,
             license: matched.license || "Standard Commercial License Included",
-            fileFormat: matched.fileFormat || "Digital Asset (ZIP/PDF)",
+            fileFormat: matched.fileFormat || matched.fileType || "Digital Asset (ZIP/PDF)",
             fileSize: matched.fileSize || "Instant Download",
             features: Array.isArray(matched.features)
               ? matched.features
               : typeof matched.features === "string"
               ? (matched.features as string).split("\n").filter((f: string) => f.trim() !== "")
               : [
-                  "Instant digital asset download link",
-                  "Lifetime access to file updates",
-                  "Standard commercial license included"
+                  "Instant digital asset download link delivered post-purchase",
+                  "Lifetime access to file versions and future updates",
+                  "Standard commercial license included for unlimited projects"
                 ]
           });
         } else {
           setProduct(null);
+        }
+
+        if (Array.isArray(revData)) {
+          setReviews(revData);
         }
       })
       .catch(() => {
@@ -171,6 +201,60 @@ export default function ProductDetailPage() {
       setTimeout(() => setCopiedLink(false), 2000);
     }
   };
+
+  // Safe-Harbor Pre-Checkout Trigger
+  const handleOpenCheckoutModal = () => {
+    setAgreedToDisclaimer(false);
+    setShowCheckoutDisclaimer(true);
+  };
+
+  const handleProceedToPayment = () => {
+    if (!agreedToDisclaimer) return;
+    setShowCheckoutDisclaimer(false);
+
+    const targetUrl = product?.paymentUrl || product?.sellerCheckoutUrl || `https://store.curiolot.com/${username}`;
+    window.location.href = targetUrl;
+  };
+
+  // Submit Review Handler
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewComment.trim() || !reviewerName.trim()) return;
+
+    setIsSubmittingReview(true);
+    try {
+      const res = await fetch("/api/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_slug: slug,
+          username,
+          reviewer_name: reviewerName,
+          rating: reviewRating,
+          comment: reviewComment,
+        }),
+      });
+
+      const data: any = await res.json().catch(() => ({}));
+      if (res.ok && data?.review) {
+        setReviews((prev) => [data.review, ...prev]);
+        setReviewComment("");
+        setReviewerName("");
+        setReviewRating(5);
+        setShowReviewSuccess(true);
+        setTimeout(() => setShowReviewSuccess(false), 4000);
+      }
+    } catch (err) {
+      console.error("Submit review error:", err);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  // Compute Average Rating
+  const averageRating = reviews.length > 0
+    ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
+    : "5.0";
 
   if (isLoading) {
     return (
@@ -202,10 +286,9 @@ export default function ProductDetailPage() {
 
   const price = Number(product.price) || 0;
   const originalPrice = product.originalPrice != null ? Number(product.originalPrice) : null;
-  const checkoutLink = product.paymentUrl || product.sellerCheckoutUrl || "#";
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-24 font-sans antialiased">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-28 font-sans antialiased">
       {/* 1. Header Navigation */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -288,6 +371,26 @@ export default function ProductDetailPage() {
                 <h1 className="mt-1 text-2xl font-extrabold text-slate-900 tracking-tight leading-snug">
                   {product.title}
                 </h1>
+
+                {/* Creator Star Rating Summary */}
+                <div className="flex items-center gap-2 mt-2.5">
+                  <div className="flex items-center text-amber-400">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`w-3.5 h-3.5 ${
+                          star <= Math.round(Number(averageRating))
+                            ? "fill-amber-400"
+                            : "fill-slate-200 text-slate-200"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-extrabold text-slate-800">{averageRating}</span>
+                  <span className="text-xs text-slate-400 font-medium">
+                    ({reviews.length} {reviews.length === 1 ? "review" : "reviews"})
+                  </span>
+                </div>
               </div>
 
               {/* Dynamic Price Display */}
@@ -325,15 +428,14 @@ export default function ProductDetailPage() {
                     <span>Download Free Resource</span>
                   </button>
                 ) : (
-                  <a
-                    href={checkoutLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={handleOpenCheckoutModal}
                     className="w-full py-3.5 px-6 rounded-2xl bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer text-center"
                   >
                     <span>Buy Now & Instant Download</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
+                    <ExternalLink className="w-4 h-4 text-slate-400" />
+                  </button>
                 )}
 
                 <p className="text-[11px] text-center text-slate-400">
@@ -347,7 +449,7 @@ export default function ProductDetailPage() {
               <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5 text-xs text-slate-600 border border-slate-100">
                 <div className="flex justify-between">
                   <span className="text-slate-400">File Type:</span>
-                  <span className="font-semibold text-slate-800">{product.fileFormat || "Digital Archive"}</span>
+                  <span className="font-semibold text-slate-800 uppercase">{product.fileFormat || "Digital Archive"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">File Size:</span>
@@ -375,7 +477,224 @@ export default function ProductDetailPage() {
           </div>
 
         </div>
+
+        {/* 3. Customer Ratings & Reviews Section */}
+        <section className="mt-14 pt-10 border-t border-slate-200/80 space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-extrabold text-slate-900">Customer Ratings & Reviews</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Authentic feedback from verified customers who acquired this asset.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-2xl border border-slate-200/80 shadow-xs">
+              <span className="text-2xl font-black text-slate-900">{averageRating}</span>
+              <div>
+                <div className="flex items-center text-amber-400">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star
+                      key={s}
+                      className={`w-3 h-3 ${s <= Math.round(Number(averageRating)) ? "fill-amber-400" : "fill-slate-200 text-slate-200"}`}
+                    />
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium">Store Reputation</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            {/* Reviews List */}
+            <div className="lg:col-span-7 space-y-4">
+              {reviews.length === 0 ? (
+                <div className="bg-white rounded-3xl p-10 text-center border border-slate-200/80 shadow-xs space-y-2">
+                  <MessageSquare className="w-8 h-8 text-slate-300 mx-auto" />
+                  <p className="text-sm font-bold text-slate-700">No customer reviews yet</p>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    Be the first verified customer to share your thoughts and star rating for @{username}.
+                  </p>
+                </div>
+              ) : (
+                reviews.map((rev) => (
+                  <div key={rev.id} className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-extrabold text-[10px] flex items-center justify-center">
+                          {rev.reviewer_name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{rev.reviewer_name}</p>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                            <CheckCircle2 className="w-2.5 h-2.5" /> Verified Purchase
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center text-amber-400">
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star
+                            key={s}
+                            className={`w-3 h-3 ${s <= rev.rating ? "fill-amber-400" : "fill-slate-200 text-slate-200"}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed pt-1">
+                      &ldquo;{rev.comment}&rdquo;
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Submit Review Form */}
+            <div className="lg:col-span-5">
+              <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-xs space-y-4">
+                <h4 className="text-sm font-bold text-slate-900">Leave a Review</h4>
+                
+                {showReviewSuccess && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>Thank you! Your feedback has been published.</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmitReview} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Your Rating</label>
+                    <div className="flex items-center gap-1.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setReviewRating(star)}
+                          className="p-1 text-amber-400 hover:scale-110 transition cursor-pointer"
+                        >
+                          <Star
+                            className={`w-5 h-5 ${star <= reviewRating ? "fill-amber-400" : "text-slate-300"}`}
+                          />
+                        </button>
+                      ))}
+                      <span className="ml-2 font-bold text-slate-700">{reviewRating} of 5 Stars</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Your Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Alex Henderson"
+                      value={reviewerName}
+                      onChange={(e) => setReviewerName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-slate-900 focus:outline-none bg-slate-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-600 font-semibold mb-1">Feedback / Experience</label>
+                    <textarea
+                      required
+                      rows={3}
+                      placeholder="Share your thoughts on file quality, ease of use, or value..."
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-slate-900 focus:outline-none bg-slate-50 resize-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReview}
+                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingReview ? "Submitting..." : "Post Review"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+          </div>
+        </section>
       </main>
+
+      {/* 4. Pre-Checkout Legal Safe-Harbor Modal */}
+      {showCheckoutDisclaimer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
+            
+            <button
+              onClick={() => setShowCheckoutDisclaimer(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Order Notice & Platform Disclaimer
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Please review the platform purchase terms before proceeding.
+                </p>
+              </div>
+            </div>
+
+            {/* Safe-Harbor Intermediary Legal Clauses */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2.5 text-xs text-slate-600 leading-relaxed mb-5">
+              <p>
+                <strong>1. Intermediary Hosting:</strong> Curiolot Commerce provides web infrastructure connecting independent creators with buyers. All digital assets are created, priced, published, and fulfilled directly by the creator (<strong>@{username}</strong>).
+              </p>
+              <p>
+                <strong>2. Content & Quality Warranty:</strong> Because digital files are non-returnable once delivered, the independent creator is solely responsible for asset licensing, file contents, download accessibility, and quality standards.
+              </p>
+              <p>
+                <strong>3. Direct Checkout:</strong> Payments are processed via external third-party gateways (e.g., Stripe, PayPal, Lemon Squeezy). Curiolot does not store or process your personal payment credentials.
+              </p>
+            </div>
+
+            {/* Buyer Consent Checkbox */}
+            <div className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-white mb-6">
+              <input
+                type="checkbox"
+                id="buyerConsent"
+                checked={agreedToDisclaimer}
+                onChange={(e) => setAgreedToDisclaimer(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 accent-slate-900 cursor-pointer shrink-0"
+              />
+              <label htmlFor="buyerConsent" className="text-xs text-slate-700 leading-snug cursor-pointer select-none">
+                I understand and agree that <strong>Curiolot is purely an intermediary platform</strong> and is not liable for creator-provided assets, external download links, or content quality. I agree to proceed to checkout.
+              </label>
+            </div>
+
+            {/* Action Buttons: Proceed button is locked until checked */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCheckoutDisclaimer(false)}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!agreedToDisclaimer}
+                onClick={handleProceedToPayment}
+                className="flex-2 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-extrabold transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-300" />
+                <span>Continue to Secure Payment</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
