@@ -35,7 +35,12 @@ async function ensureStoreSettingsTable(db: any) {
         promo_description TEXT,
         promo_code TEXT,
         paypal_handle TEXT,
-        payout_provider TEXT,
+        payout_provider TEXT DEFAULT 'paypal',
+        payout_lemonsqueezy_url TEXT,
+        payout_stripe_url TEXT,
+        payout_paddle_url TEXT,
+        payout_kofi_url TEXT,
+        payout_custom_url TEXT,
         updated_at TEXT
       )
     `).run();
@@ -70,7 +75,12 @@ async function ensureStoreSettingsTable(db: any) {
         { name: "promo_description", type: "TEXT" },
         { name: "promo_code", type: "TEXT" },
         { name: "paypal_handle", type: "TEXT" },
-        { name: "payout_provider", type: "TEXT" },
+        { name: "payout_provider", type: "TEXT DEFAULT 'paypal'" },
+        { name: "payout_lemonsqueezy_url", type: "TEXT" },
+        { name: "payout_stripe_url", type: "TEXT" },
+        { name: "payout_paddle_url", type: "TEXT" },
+        { name: "payout_kofi_url", type: "TEXT" },
+        { name: "payout_custom_url", type: "TEXT" },
         { name: "updated_at", type: "TEXT" },
       ];
 
@@ -114,7 +124,7 @@ function parseVisibility(value: any, fallback: number = 0): number {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const username = searchParams.get("username") || "aries";
+    const username = (searchParams.get("username") || "aries").trim().toLowerCase();
     const defaultTitle = getDefaultStoreTitle(username);
 
     const { env } = getRequestContext();
@@ -130,8 +140,11 @@ export async function GET(req: Request) {
         showHeroTitle: false,
         showHeroDescription: false,
         payoutProvider: "paypal",
+        payout_provider: "paypal",
         payoutPaypalHandle: "curiolot",
         paypalHandle: "curiolot",
+        payoutLemonSqueezyUrl: "",
+        lemonSqueezyUrl: "",
         isPro: true,
       });
     }
@@ -139,13 +152,13 @@ export async function GET(req: Request) {
     await ensureStoreSettingsTable(db);
 
     const settingsRow: any = await db
-      .prepare("SELECT * FROM store_settings WHERE username = ? LIMIT 1")
+      .prepare("SELECT * FROM store_settings WHERE LOWER(username) = LOWER(?) LIMIT 1")
       .bind(username)
       .first()
       .catch(() => null);
 
     const userRow: any = await db
-      .prepare("SELECT * FROM users WHERE username = ? LIMIT 1")
+      .prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1")
       .bind(username)
       .first()
       .catch(() => null);
@@ -158,16 +171,16 @@ export async function GET(req: Request) {
 
     const rawHandle =
       settingsRow?.paypal_handle ||
+      settingsRow?.payout_paypal_handle ||
       userRow?.paypal_handle ||
       "curiolot";
-    const cleanPaypalHandle = (!rawHandle || rawHandle === "aries") ? "curiolot" : rawHandle;
+    const cleanPaypalHandle = (!rawHandle || rawHandle.toLowerCase() === "aries") ? "curiolot" : rawHandle;
 
     const storeTitle = settingsRow?.store_title || defaultTitle;
     const showHero = settingsRow ? Boolean(settingsRow.show_hero) : true;
     const showBundle = settingsRow ? Boolean(settingsRow.show_bundle) : true;
     const showPromo = settingsRow ? Boolean(settingsRow.show_promo) : true;
 
-    // Membaca status toggle teks
     const showHeroBadge = settingsRow ? Boolean(settingsRow.show_hero_badge) : false;
     const showHeroTitle = settingsRow ? Boolean(settingsRow.show_hero_title) : false;
     const showHeroDescription = settingsRow ? Boolean(settingsRow.show_hero_description) : false;
@@ -175,14 +188,21 @@ export async function GET(req: Request) {
     let cleanLogoUrl = settingsRow?.logo_url || "";
     if (cleanLogoUrl.startsWith("data:") && cleanLogoUrl.length > 30000) {
       cleanLogoUrl = "";
-      db.prepare("UPDATE store_settings SET logo_url = '' WHERE username = ?").bind(username).run().catch(() => {});
+      db.prepare("UPDATE store_settings SET logo_url = '' WHERE LOWER(username) = LOWER(?)").bind(username).run().catch(() => {});
     }
 
     let cleanBannerUrl = settingsRow?.banner_url || "";
     if (cleanBannerUrl.startsWith("data:") && cleanBannerUrl.length > 50000) {
       cleanBannerUrl = "";
-      db.prepare("UPDATE store_settings SET banner_url = '' WHERE username = ?").bind(username).run().catch(() => {});
+      db.prepare("UPDATE store_settings SET banner_url = '' WHERE LOWER(username) = LOWER(?)").bind(username).run().catch(() => {});
     }
+
+    const currentProvider = settingsRow?.payout_provider || userRow?.payout_provider || "paypal";
+    const currentLemonUrl = settingsRow?.payout_lemonsqueezy_url || "";
+    const currentStripeUrl = settingsRow?.payout_stripe_url || "";
+    const currentPaddleUrl = settingsRow?.payout_paddle_url || "";
+    const currentKofiUrl = settingsRow?.payout_kofi_url || "";
+    const currentCustomUrl = settingsRow?.payout_custom_url || "";
 
     return NextResponse.json({
       username,
@@ -226,9 +246,20 @@ export async function GET(req: Request) {
       promoDescription: settingsRow?.promo_description || "Apply this coupon code at checkout to claim your launch discount.",
       promoCode: settingsRow?.promo_code || "CURIOLOT30",
 
-      payoutProvider: settingsRow?.payout_provider || userRow?.payout_provider || "paypal",
+      // Payout Configuration (Ganda format camelCase & snake_case)
+      payoutProvider: currentProvider,
+      payout_provider: currentProvider,
       payoutPaypalHandle: cleanPaypalHandle,
       paypalHandle: cleanPaypalHandle,
+      payoutLemonSqueezyUrl: currentLemonUrl,
+      payout_lemonsqueezy_url: currentLemonUrl,
+      lemonSqueezyUrl: currentLemonUrl,
+      payoutStripeUrl: currentStripeUrl,
+      payout_stripe_url: currentStripeUrl,
+      payoutPaddleUrl: currentPaddleUrl,
+      payoutKofiUrl: currentKofiUrl,
+      payoutCustomUrl: currentCustomUrl,
+
       isPro,
       plan: isPro ? "pro" : "free",
     });
@@ -249,11 +280,11 @@ export async function POST(req: Request) {
 
     await ensureStoreSettingsTable(db);
     const body: any = await req.json();
-    const username = body.username || "aries";
+    const username = (body.username || "aries").trim().toLowerCase();
     const defaultTitle = getDefaultStoreTitle(username);
 
     const existing: any = await db
-      .prepare("SELECT * FROM store_settings WHERE username = ? LIMIT 1")
+      .prepare("SELECT * FROM store_settings WHERE LOWER(username) = LOWER(?) LIMIT 1")
       .bind(username)
       .first()
       .catch(() => null);
@@ -268,12 +299,12 @@ export async function POST(req: Request) {
 
     let logoUrl = typeof body.logoUrl === "string" 
       ? body.logoUrl.trim() 
-      : (body.storeLogo || body.avatarUrl || "");
+      : (body.storeLogo || body.avatarUrl || existing?.logo_url || "");
     if (logoUrl.startsWith("data:") && logoUrl.length > 30000) logoUrl = "";
 
     let bannerUrl = typeof body.bannerUrl === "string"
       ? body.bannerUrl.trim()
-      : (body.heroImageUrl || body.bannerImageUrl || "");
+      : (body.heroImageUrl || body.bannerImageUrl || existing?.banner_url || "");
     if (bannerUrl.startsWith("data:") && bannerUrl.length > 50000) bannerUrl = "";
 
     const heroBadge = body.heroBadge || body.badgeTag || existing?.hero_badge || "Featured Release";
@@ -283,7 +314,6 @@ export async function POST(req: Request) {
     const rawHero = body.showHero ?? body.showHeroBanner ?? body.bannerActive ?? body.isHeroActive ?? existing?.show_hero;
     const showHero = parseVisibility(rawHero, 1);
 
-    // Parse toggle status untuk disimpan ke D1
     const rawHeroBadge = body.showHeroBadge ?? existing?.show_hero_badge;
     const showHeroBadge = parseVisibility(rawHeroBadge, 0);
 
@@ -310,12 +340,62 @@ export async function POST(req: Request) {
     const promoDescription = body.promoDescription || existing?.promo_description || "";
     const promoCode = body.promoCode || existing?.promo_code || "CURIOLOT30";
 
+    // Ekstraksi Pengaturan Gateway & PayPal
     const rawHandle = body.payoutPaypalHandle || body.paypalHandle || existing?.paypal_handle || "curiolot";
     const cleanPaypalHandle = (!rawHandle || rawHandle.toLowerCase() === "aries")
       ? "curiolot"
       : rawHandle.replace(/^https?:\/\/paypal\.me\//i, "").replace(/\/.*$/, "").trim();
 
-    const payoutProvider = body.payoutProvider || existing?.payout_provider || "paypal";
+    // Menerima berbagai macam format penamaan gateway dari frontend
+    const payoutProvider = (
+      body.payoutProvider ||
+      body.payout_provider ||
+      body.provider ||
+      existing?.payout_provider ||
+      "paypal"
+    ).trim().toLowerCase();
+
+    // Menerima berbagai macam format penamaan URL dari frontend
+    const payoutLemonSqueezyUrl = (
+      body.payoutLemonSqueezyUrl ||
+      body.lemonSqueezyUrl ||
+      body.payout_lemonsqueezy_url ||
+      body.lemonsqueezy_url ||
+      existing?.payout_lemonsqueezy_url ||
+      ""
+    ).trim();
+
+    const payoutStripeUrl = (
+      body.payoutStripeUrl ||
+      body.stripeUrl ||
+      body.payout_stripe_url ||
+      existing?.payout_stripe_url ||
+      ""
+    ).trim();
+
+    const payoutPaddleUrl = (
+      body.payoutPaddleUrl ||
+      body.paddleUrl ||
+      body.payout_paddle_url ||
+      existing?.payout_paddle_url ||
+      ""
+    ).trim();
+
+    const payoutKofiUrl = (
+      body.payoutKofiUrl ||
+      body.kofiUrl ||
+      body.payout_kofi_url ||
+      existing?.payout_kofi_url ||
+      ""
+    ).trim();
+
+    const payoutCustomUrl = (
+      body.payoutCustomUrl ||
+      body.customUrl ||
+      body.payout_custom_url ||
+      existing?.payout_custom_url ||
+      ""
+    ).trim();
 
     await db.prepare(`
       INSERT INTO store_settings (
@@ -325,7 +405,9 @@ export async function POST(req: Request) {
         show_bundle, show_promo,
         bundle_badge, bundle_title, bundle_description, bundle_url, bundle_btn_text,
         promo_badge, promo_title, promo_description, promo_code,
-        paypal_handle, payout_provider, updated_at
+        paypal_handle, payout_provider, payout_lemonsqueezy_url,
+        payout_stripe_url, payout_paddle_url, payout_kofi_url, payout_custom_url,
+        updated_at
       ) VALUES (
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -333,7 +415,9 @@ export async function POST(req: Request) {
         ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?
       )
       ON CONFLICT(username) DO UPDATE SET
         store_title = excluded.store_title,
@@ -359,6 +443,11 @@ export async function POST(req: Request) {
         promo_code = excluded.promo_code,
         paypal_handle = excluded.paypal_handle,
         payout_provider = excluded.payout_provider,
+        payout_lemonsqueezy_url = excluded.payout_lemonsqueezy_url,
+        payout_stripe_url = excluded.payout_stripe_url,
+        payout_paddle_url = excluded.payout_paddle_url,
+        payout_kofi_url = excluded.payout_kofi_url,
+        payout_custom_url = excluded.payout_custom_url,
         updated_at = excluded.updated_at
     `).bind(
       username, storeTitle, logoUrl, bannerUrl,
@@ -367,11 +456,13 @@ export async function POST(req: Request) {
       showBundle, showPromo,
       bundleBadge, bundleTitle, bundleDescription, bundleUrl, bundleBtnText,
       promoBadge, promoTitle, promoDescription, promoCode,
-      cleanPaypalHandle, payoutProvider, new Date().toISOString()
+      cleanPaypalHandle, payoutProvider, payoutLemonSqueezyUrl,
+      payoutStripeUrl, payoutPaddleUrl, payoutKofiUrl, payoutCustomUrl,
+      new Date().toISOString()
     ).run();
 
     try {
-      await db.prepare("UPDATE users SET paypal_handle = ?, payout_provider = ? WHERE username = ?")
+      await db.prepare("UPDATE users SET paypal_handle = ?, payout_provider = ? WHERE LOWER(username) = LOWER(?)")
         .bind(cleanPaypalHandle, payoutProvider, username)
         .run();
     } catch {}
@@ -379,6 +470,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       message: "Store settings saved successfully to D1 database.",
+      payoutProvider,
+      payoutLemonSqueezyUrl,
     });
   } catch (err: any) {
     console.error("Failed to save store settings to D1:", err);
