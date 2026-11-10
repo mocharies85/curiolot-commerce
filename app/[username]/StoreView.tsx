@@ -47,6 +47,75 @@ const CATEGORIES = [
   { name: "Special Deals", icon: Percent, match: [] as string[], highlight: true },
 ];
 
+// Helper kalkulasi status keaktifan kreator
+function getCreatorActivityStatus(lastActiveDateString?: string | null) {
+  if (!lastActiveDateString) {
+    return {
+      label: "Aktif baru saja",
+      color: "emerald" as const,
+      isWarning: false,
+    };
+  }
+
+  const lastActive = new Date(lastActiveDateString).getTime();
+  if (isNaN(lastActive)) {
+    return {
+      label: "Aktif baru saja",
+      color: "emerald" as const,
+      isWarning: false,
+    };
+  }
+
+  const now = new Date().getTime();
+  const diffInHours = Math.floor((now - lastActive) / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInHours / 24);
+
+  // 1. Kurang dari 24 jam
+  if (diffInHours < 24) {
+    return {
+      label: diffInHours <= 1 ? "Online baru saja" : `Aktif ${diffInHours} jam lalu`,
+      color: "emerald" as const,
+      isWarning: false,
+    };
+  }
+
+  // 2. Dalam 7 hari terakhir
+  if (diffInDays < 7) {
+    return {
+      label: `Aktif ${diffInDays} hari lalu`,
+      color: "emerald" as const,
+      isWarning: false,
+    };
+  }
+
+  // 3. Dalam 30 hari terakhir
+  if (diffInDays <= 30) {
+    const weeks = Math.floor(diffInDays / 7);
+    return {
+      label: `Aktif ${weeks} minggu lalu`,
+      color: "amber" as const,
+      isWarning: false,
+    };
+  }
+
+  // 4. Lebih dari 90 hari (3 bulan tidak aktif) -> Status Peringatan Pembeli
+  if (diffInDays > 90) {
+    return {
+      label: "Perhatian: Tidak aktif > 3 bulan",
+      color: "rose" as const,
+      isWarning: true,
+    };
+  }
+
+  // Antara 1 - 3 bulan
+  const months = Math.floor(diffInDays / 30);
+  return {
+    label: `Aktif ${months} bulan lalu`,
+    color: "amber" as const,
+    isWarning: false,
+  };
+}
+
 export default function StoreView({ username }: StoreViewProps) {
   const router = useRouter();
 
@@ -162,7 +231,6 @@ export default function StoreView({ username }: StoreViewProps) {
         return;
       }
 
-      // Registration Flow with Verification Barrier
       if (authMode === "signup") {
         if (!agreeTerms) {
           setAuthError("You must agree to the Terms of Service and Privacy Policy to create an account.");
@@ -200,7 +268,6 @@ export default function StoreView({ username }: StoreViewProps) {
         return;
       }
 
-      // Log In Flow
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -391,13 +458,19 @@ export default function StoreView({ username }: StoreViewProps) {
 
   const hasHeroText = showBadge || showTitle || showDesc;
 
+  // Hitung status keaktifan kreator untuk ditampilkan ke pembeli
+  const creatorActivity = useMemo(() => {
+    const rawTime = (settings as any)?.lastActiveAt || (settings as any)?.last_active_at || (settings as any)?.updated_at;
+    return getCreatorActivityStatus(rawTime);
+  }, [settings]);
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-24 font-sans antialiased">
       {/* 1. Global Navigation Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo */}
+          {/* Brand Identity & Logo & Indikator Keaktifan */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="shrink-0">
               {storeLogo && !logoFailed ? (
@@ -423,7 +496,28 @@ export default function StoreView({ username }: StoreViewProps) {
                 </span>
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100 shrink-0" />
               </div>
-              <p className="text-xs text-slate-400 font-medium mt-1">Official Creator Storefront</p>
+
+              {/* Status Bar: Toko Resmi & Indikator Keaktifan */}
+              <div className="flex flex-wrap items-center gap-2 mt-1">
+                <p className="text-xs text-slate-400 font-medium">Official Creator Storefront</p>
+                <span className="text-slate-300 text-xs hidden sm:inline">•</span>
+
+                {creatorActivity.isWarning ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                    <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                    <span>{creatorActivity.label}</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 border border-slate-200/80 px-2.5 py-0.5 rounded-full">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${
+                      creatorActivity.color === "emerald" 
+                        ? "bg-emerald-500 animate-pulse" 
+                        : "bg-amber-500"
+                    }`} />
+                    <span>{creatorActivity.label}</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -497,7 +591,6 @@ export default function StoreView({ username }: StoreViewProps) {
               </span>
             </div>
 
-            {/* Tombol Bio Link: Navigasi di Tab yang Sama (target="_self") */}
             <a
               href={`https://link.curiolot.com/${username}`}
               target="_self"
@@ -588,6 +681,28 @@ export default function StoreView({ username }: StoreViewProps) {
 
       {/* 4. Product Catalog & Promo Grid */}
       <section id="products" className="max-w-7xl mx-auto px-4 sm:px-6 pt-12">
+        
+        {/* Banner Peringatan Khusus Pembeli jika Kreator Tidak Aktif > 3 Bulan */}
+        {creatorActivity.isWarning && (
+          <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-4 h-4" />
+              </div>
+              <p className="leading-relaxed">
+                <strong>Peringatan Pembeli:</strong> Kreator toko ini belum aktif selama lebih dari 3 bulan. Kami menyarankan untuk menghubungi kreator terlebih dahulu sebelum melakukan transaksi pembayaran.
+              </p>
+            </div>
+            <a
+              href={`https://link.curiolot.com/${username}`}
+              target="_self"
+              className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shrink-0 self-end sm:self-auto"
+            >
+              Cek Kontak Kreator
+            </a>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-8">
           <div>
             <div className="flex items-center gap-3">

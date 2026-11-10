@@ -41,6 +41,7 @@ async function ensureStoreSettingsTable(db: any) {
         payout_paddle_url TEXT,
         payout_kofi_url TEXT,
         payout_custom_url TEXT,
+        last_active_at TEXT,
         updated_at TEXT
       )
     `).run();
@@ -81,6 +82,7 @@ async function ensureStoreSettingsTable(db: any) {
         { name: "payout_paddle_url", type: "TEXT" },
         { name: "payout_kofi_url", type: "TEXT" },
         { name: "payout_custom_url", type: "TEXT" },
+        { name: "last_active_at", type: "TEXT" },
         { name: "updated_at", type: "TEXT" },
       ];
 
@@ -145,6 +147,8 @@ export async function GET(req: Request) {
         paypalHandle: "curiolot",
         payoutLemonSqueezyUrl: "",
         lemonSqueezyUrl: "",
+        lastActiveAt: new Date().toISOString(),
+        last_active_at: new Date().toISOString(),
         isPro: true,
       });
     }
@@ -204,6 +208,9 @@ export async function GET(req: Request) {
     const currentKofiUrl = settingsRow?.payout_kofi_url || "";
     const currentCustomUrl = settingsRow?.payout_custom_url || "";
 
+    // Ambil waktu terakhir aktif
+    const lastActiveAt = settingsRow?.last_active_at || settingsRow?.updated_at || new Date().toISOString();
+
     return NextResponse.json({
       username,
       storeTitle,
@@ -246,7 +253,7 @@ export async function GET(req: Request) {
       promoDescription: settingsRow?.promo_description || "Apply this coupon code at checkout to claim your launch discount.",
       promoCode: settingsRow?.promo_code || "CURIOLOT30",
 
-      // Payout Configuration (Ganda format camelCase & snake_case)
+      // Payout Configuration
       payoutProvider: currentProvider,
       payout_provider: currentProvider,
       payoutPaypalHandle: cleanPaypalHandle,
@@ -259,6 +266,10 @@ export async function GET(req: Request) {
       payoutPaddleUrl: currentPaddleUrl,
       payoutKofiUrl: currentKofiUrl,
       payoutCustomUrl: currentCustomUrl,
+
+      // Creator Activity Timestamp
+      lastActiveAt,
+      last_active_at: lastActiveAt,
 
       isPro,
       plan: isPro ? "pro" : "free",
@@ -346,7 +357,6 @@ export async function POST(req: Request) {
       ? "curiolot"
       : rawHandle.replace(/^https?:\/\/paypal\.me\//i, "").replace(/\/.*$/, "").trim();
 
-    // Menerima berbagai macam format penamaan gateway dari frontend
     const payoutProvider = (
       body.payoutProvider ||
       body.payout_provider ||
@@ -355,7 +365,6 @@ export async function POST(req: Request) {
       "paypal"
     ).trim().toLowerCase();
 
-    // Menerima berbagai macam format penamaan URL dari frontend
     const payoutLemonSqueezyUrl = (
       body.payoutLemonSqueezyUrl ||
       body.lemonSqueezyUrl ||
@@ -397,6 +406,10 @@ export async function POST(req: Request) {
       ""
     ).trim();
 
+    // Waktu update keaktifan
+    const nowIso = new Date().toISOString();
+    const lastActiveAt = body.lastActiveAt || nowIso;
+
     await db.prepare(`
       INSERT INTO store_settings (
         username, store_title, logo_url, banner_url,
@@ -407,7 +420,7 @@ export async function POST(req: Request) {
         promo_badge, promo_title, promo_description, promo_code,
         paypal_handle, payout_provider, payout_lemonsqueezy_url,
         payout_stripe_url, payout_paddle_url, payout_kofi_url, payout_custom_url,
-        updated_at
+        last_active_at, updated_at
       ) VALUES (
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -417,7 +430,7 @@ export async function POST(req: Request) {
         ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?,
-        ?
+        ?, ?
       )
       ON CONFLICT(username) DO UPDATE SET
         store_title = excluded.store_title,
@@ -448,6 +461,7 @@ export async function POST(req: Request) {
         payout_paddle_url = excluded.payout_paddle_url,
         payout_kofi_url = excluded.payout_kofi_url,
         payout_custom_url = excluded.payout_custom_url,
+        last_active_at = excluded.last_active_at,
         updated_at = excluded.updated_at
     `).bind(
       username, storeTitle, logoUrl, bannerUrl,
@@ -458,7 +472,7 @@ export async function POST(req: Request) {
       promoBadge, promoTitle, promoDescription, promoCode,
       cleanPaypalHandle, payoutProvider, payoutLemonSqueezyUrl,
       payoutStripeUrl, payoutPaddleUrl, payoutKofiUrl, payoutCustomUrl,
-      new Date().toISOString()
+      lastActiveAt, nowIso
     ).run();
 
     try {
@@ -472,6 +486,7 @@ export async function POST(req: Request) {
       message: "Store settings saved successfully to D1 database.",
       payoutProvider,
       payoutLemonSqueezyUrl,
+      lastActiveAt,
     });
   } catch (err: any) {
     console.error("Failed to save store settings to D1:", err);
@@ -481,4 +496,4 @@ export async function POST(req: Request) {
 
 export async function PUT(req: Request) {
   return POST(req);
-}
+} 

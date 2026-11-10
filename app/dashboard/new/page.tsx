@@ -104,6 +104,16 @@ export default function NewProductPage() {
       }
     }
 
+    // Auto-ping status keaktifan kreator ke D1 database setiap kali halaman ini dibuka
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username,
+        lastActiveAt: new Date().toISOString(),
+      }),
+    }).catch(() => {});
+
     fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
@@ -183,7 +193,6 @@ export default function NewProductPage() {
               const existingPayUrl = currentProduct.paymentUrl || currentProduct.sellerCheckoutUrl || "";
               if (existingPayUrl) {
                 setCustomProductUrl(existingPayUrl);
-                // Deteksi apakah link lama bukan auto-generated standar
                 if (
                   !existingPayUrl.includes("paypal.com/cgi-bin/webscr") && 
                   !existingPayUrl.includes("paypal.me/")
@@ -243,7 +252,6 @@ export default function NewProductPage() {
       default: {
         let cleanBusiness = (paypalHandle || "").trim();
 
-        // Jika tersimpan dalam format link paypal.me, ambil username-nya
         if (cleanBusiness.startsWith("http")) {
           cleanBusiness = cleanBusiness
             .replace(/^https?:\/\/paypal\.me\//i, "")
@@ -251,15 +259,12 @@ export default function NewProductPage() {
             .trim();
         }
 
-        // Fallback default jika masih kosong atau bernilai 'aries'
         if (!cleanBusiness || cleanBusiness === "aries") {
           cleanBusiness = "sigaries85@gmail.com";
         }
 
-        // Tautan pengembalian otomatis ke halaman sukses produk milik kreator ini
         const returnSuccessUrl = `https://store.curiolot.com/${username}/success?product=${encodeURIComponent(slug || "product")}`;
 
-        // Rakit URL resmi PayPal Standard Checkout
         const baseUrl = "https://www.paypal.com/cgi-bin/webscr";
         const params = new URLSearchParams({
           cmd: "_xclick",
@@ -432,7 +437,7 @@ export default function NewProductPage() {
       sellerCheckoutUrl: resolvedFinalPaymentUrl,
       fileFormat,
       fileSize: productFileSize || "4.5 MB",
-      fileUrl: fileUrl || "", // Menyimpan link file asli, tidak lagi memakai fallback cover
+      fileUrl: fileUrl || "",
       license: "Standard Commercial License Included",
       description,
       features: features.split("\n").filter((f) => f.trim() !== ""),
