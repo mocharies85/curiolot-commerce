@@ -83,7 +83,7 @@ export default function NewProductPage() {
   const [attemptedFileSize, setAttemptedFileSize] = useState("");
 
   const [payoutProvider, setPayoutProvider] = useState<PayoutProvider>("paypal");
-  const [paypalHandle, setPaypalHandle] = useState("curiolot");
+  const [paypalHandle, setPaypalHandle] = useState("sigaries85@gmail.com");
   const [stripeUrl, setStripeUrl] = useState("");
   const [lemonSqueezyUrl, setLemonSqueezyUrl] = useState("");
   const [paddleUrl, setPaddleUrl] = useState("");
@@ -113,14 +113,14 @@ export default function NewProductPage() {
             setPayoutProvider(String(rawProvider).toLowerCase() as PayoutProvider);
           }
           
-          const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.payout_paypal_handle || data.paypal_handle;
+          const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.payout_paypal_handle || data.paypal_handle || data.paypalEmail || data.payout_paypal_email;
           if (rawHandle && rawHandle !== "aries") {
             setPaypalHandle(rawHandle);
             if (typeof window !== "undefined") {
               localStorage.setItem("curiolot_paypal_handle", rawHandle);
             }
           } else {
-            setPaypalHandle("curiolot");
+            setPaypalHandle("sigaries85@gmail.com");
           }
 
           const rawLemon = data.payoutLemonSqueezyUrl || data.lemonSqueezyUrl || data.payout_lemonsqueezy_url || data.lemonsqueezy_url;
@@ -183,7 +183,11 @@ export default function NewProductPage() {
               const existingPayUrl = currentProduct.paymentUrl || currentProduct.sellerCheckoutUrl || "";
               if (existingPayUrl) {
                 setCustomProductUrl(existingPayUrl);
-                if (!existingPayUrl.includes("paypal.me/curiolot")) {
+                // Deteksi apakah link lama bukan auto-generated standar
+                if (
+                  !existingPayUrl.includes("paypal.com/cgi-bin/webscr") && 
+                  !existingPayUrl.includes("paypal.me/")
+                ) {
                   setUseCustomUrl(true);
                 }
               }
@@ -218,6 +222,7 @@ export default function NewProductPage() {
       .catch((err) => console.error("Failed to load products count:", err));
   }, [username, isPro]);
 
+  // GENERATOR LINK OTOMATIS: Mendukung PayPal Standard Checkout dengan Auto-Return ke /success
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -236,19 +241,40 @@ export default function NewProductPage() {
         return customUrl || "#";
       case "paypal":
       default: {
-        let cleanHandle = (paypalHandle || "")
-          .replace(/^https?:\/\/paypal\.me\//i, "")
-          .replace(/\/.*$/, "")
-          .trim();
+        let cleanBusiness = (paypalHandle || "").trim();
 
-        if (!cleanHandle || cleanHandle === "aries") {
-          cleanHandle = "curiolot";
+        // Jika tersimpan dalam format link paypal.me, ambil username-nya
+        if (cleanBusiness.startsWith("http")) {
+          cleanBusiness = cleanBusiness
+            .replace(/^https?:\/\/paypal\.me\//i, "")
+            .replace(/\/.*$/, "")
+            .trim();
         }
 
-        return `https://paypal.me/${cleanHandle}/${numericPrice.toFixed(2)}USD`;
+        // Fallback default jika masih kosong atau bernilai 'aries'
+        if (!cleanBusiness || cleanBusiness === "aries") {
+          cleanBusiness = "sigaries85@gmail.com";
+        }
+
+        // Tautan pengembalian otomatis ke halaman sukses produk milik kreator ini
+        const returnSuccessUrl = `https://store.curiolot.com/${username}/success?product=${encodeURIComponent(slug || "product")}`;
+
+        // Rakit URL resmi PayPal Standard Checkout
+        const baseUrl = "https://www.paypal.com/cgi-bin/webscr";
+        const params = new URLSearchParams({
+          cmd: "_xclick",
+          business: cleanBusiness,
+          item_name: title || "Digital Product Asset",
+          amount: numericPrice.toFixed(2),
+          currency_code: "USD",
+          no_shipping: "1",
+          return: returnSuccessUrl,
+        });
+
+        return `${baseUrl}?${params.toString()}`;
       }
     }
-  }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
+  }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl, title, slug, username]);
 
   const resolvedFinalPaymentUrl = useMemo(() => {
     if (isFree) return "";
@@ -261,13 +287,13 @@ export default function NewProductPage() {
   const getGatewayLabel = () => {
     const cleanProvider = String(payoutProvider || "paypal").toLowerCase().trim();
     switch (cleanProvider) {
-      case "paypal": return "PayPal.Me Instant Payout";
+      case "paypal": return "PayPal Standard Checkout (Auto-Return to Download)";
       case "stripe": return "Stripe Checkout";
       case "lemonsqueezy": return "Lemon Squeezy Store";
       case "paddle": return "Paddle Checkout";
       case "kofi": return "Ko-fi / Buy Me a Coffee";
       case "custom": return "Custom / Regional Gateway";
-      default: return "PayPal.Me Instant Payout";
+      default: return "PayPal Standard Checkout (Auto-Return to Download)";
     }
   };
 
@@ -320,7 +346,7 @@ export default function NewProductPage() {
     }
   };
 
-  // Upload file arsip produk ke Cloudflare R2
+  // Upload file arsip produk digital ke Cloudflare R2
   const handleProductFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -406,7 +432,7 @@ export default function NewProductPage() {
       sellerCheckoutUrl: resolvedFinalPaymentUrl,
       fileFormat,
       fileSize: productFileSize || "4.5 MB",
-      fileUrl: fileUrl || coverUrl, // Simpan link file unduhan ke database D1
+      fileUrl: fileUrl || "", // Menyimpan link file asli, tidak lagi memakai fallback cover
       license: "Standard Commercial License Included",
       description,
       features: features.split("\n").filter((f) => f.trim() !== ""),
