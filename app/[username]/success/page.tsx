@@ -1,6 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+export const runtime = "edge";
+
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { 
@@ -12,20 +14,60 @@ import {
   Sparkles, 
   Copy, 
   Check, 
-  ExternalLink 
+  ExternalLink,
+  Loader2
 } from "lucide-react";
+
+interface Product {
+  id: string;
+  title: string;
+  slug: string;
+  category: string;
+  description: string;
+  price: number;
+  fileFormat: string;
+  fileSize: string;
+  coverUrl: string;
+  fileUrl?: string;
+}
 
 function SuccessContent() {
   const params = useParams() as any;
   const searchParams = useSearchParams();
 
   const username = (params?.username as string) || "aries";
-  const itemParam = searchParams.get("item") || "Digital Asset Bundle";
+  const productQuery = searchParams.get("product") || searchParams.get("item") || searchParams.get("slug") || "";
   const orderId = searchParams.get("order_id") || `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
+  const [product, setProduct] = useState<Product | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+
   const licenseKey = `CURIOLOT-LIC-${orderId}-VALID`;
+
+  // Ambil data produk asli dari D1 Database
+  useEffect(() => {
+    fetch(`/api/products?username=${encodeURIComponent(username)}`)
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (Array.isArray(data)) {
+          const found = data.find(
+            (p: any) =>
+              p.slug?.toLowerCase() === productQuery.toLowerCase() ||
+              p.id === productQuery ||
+              p.title?.toLowerCase().includes(productQuery.toLowerCase())
+          );
+          if (found) {
+            setProduct(found);
+          } else if (data.length > 0) {
+            setProduct(data[0]); // Fallback ke produk terbaru jika query kosong
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load product details for success page:", err))
+      .finally(() => setIsLoading(false));
+  }, [username, productQuery]);
 
   const handleCopyLicense = () => {
     navigator.clipboard.writeText(licenseKey);
@@ -33,11 +75,26 @@ function SuccessContent() {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
+  // Unduh file asli dari Cloudflare R2
   const handleTriggerDownload = () => {
+    if (!product?.fileUrl) {
+      alert("File asset is being synchronized. Please also check your checkout confirmation email for the direct download link.");
+      return;
+    }
+
     setIsDownloading(true);
+
+    const link = document.createElement("a");
+    link.href = product.fileUrl;
+    link.setAttribute("download", `${product.title || "Asset"}.${(product.fileFormat || "zip").toLowerCase()}`);
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
     setTimeout(() => {
       setIsDownloading(false);
-      alert("Your download has started! Check your browser's download manager.");
     }, 1200);
   };
 
@@ -101,15 +158,22 @@ function SuccessContent() {
           {/* Product Download Block */}
           <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <FileArchive className="w-6 h-6 text-indigo-400" />
-              </div>
+              {product?.coverUrl ? (
+                <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-200 flex items-center justify-center">
+                  <img src={product.coverUrl} alt={product.title} className="w-full h-full object-contain" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <FileArchive className="w-6 h-6 text-indigo-400" />
+                </div>
+              )}
+
               <div>
                 <h3 className="text-sm font-bold text-slate-900 leading-tight">
-                  {itemParam === "bundle" ? "All-Access Creator Bundle (Complete Package)" : itemParam}
+                  {isLoading ? "Loading product..." : product?.title || (productQuery || "Digital Asset")}
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Secure Digital Archive • Lifetime Commercial License
+                  {product?.fileFormat || "Digital File"} • {product?.fileSize || "Cloud Vault"} • Lifetime License
                 </p>
               </div>
             </div>
@@ -117,11 +181,20 @@ function SuccessContent() {
             <button
               type="button"
               onClick={handleTriggerDownload}
-              disabled={isDownloading}
+              disabled={isDownloading || isLoading}
               className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Download className="w-4 h-4" />
-              <span>{isDownloading ? "Preparing File..." : "Download Files (ZIP)"}</span>
+              {isDownloading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Downloading...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Download {product?.fileFormat || "File"}</span>
+                </>
+              )}
             </button>
           </div>
 
@@ -165,14 +238,12 @@ function SuccessContent() {
 
         {/* Assistance / Support Links */}
         <div className="text-xs text-slate-400 space-y-1">
-          <p>
-            Need assistance with your files or unzipping instructions?
-          </p>
+          <p>Need assistance with your files or unzipping instructions?</p>
           <Link
             href={`/${username}`}
             className="text-slate-700 font-semibold hover:underline inline-flex items-center gap-1"
           >
-            <span>Return to {username}'s Storefront</span>
+            <span>Return to {username}&apos;s Storefront</span>
             <ExternalLink className="w-3 h-3" />
           </Link>
         </div>
@@ -184,7 +255,13 @@ function SuccessContent() {
 
 export default function OrderSuccessPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-xs text-slate-400">Loading order details...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-xs text-slate-400">
+          Loading order details...
+        </div>
+      }
+    >
       <SuccessContent />
     </Suspense>
   );
