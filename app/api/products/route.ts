@@ -189,14 +189,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Username is required to create a product." }, { status: 400 });
     }
 
+    // === VALIDASI KUOTA 5 PRODUK UNTUK FREE CREATOR ===
+    const userRow: any = await db
+      .prepare("SELECT is_pro, plan FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1")
+      .bind(username)
+      .first()
+      .catch(() => null);
+
+    const isPro = userRow?.is_pro === 1 || userRow?.is_pro === true || userRow?.plan === "pro";
+
+    if (!isPro) {
+      const countRow: any = await db
+        .prepare("SELECT COUNT(*) as total FROM store_products WHERE LOWER(username) = LOWER(?)")
+        .bind(username)
+        .first()
+        .catch(() => ({ total: 0 }));
+
+      const currentTotal = Number(countRow?.total) || 0;
+      if (currentTotal >= 5) {
+        return NextResponse.json(
+          { 
+            error: "Free Plan Limit Reached: You have reached the maximum limit of 5 products. Please upgrade to Pro to publish unlimited digital assets." 
+          },
+          { status: 403 }
+        );
+      }
+    }
+    // ===================================================
+
     let userId = body.userId || body.user_id;
     if (!userId) {
       try {
-        const userRow: any = await db
+        const userRowData: any = await db
           .prepare("SELECT username FROM users WHERE LOWER(username) = ? LIMIT 1")
           .bind(username)
           .first();
-        userId = userRow?.username || username;
+        userId = userRowData?.username || username;
       } catch {
         userId = username;
       }

@@ -18,9 +18,10 @@ import {
   HardDrive, 
   Eye,
   Save,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
-import type { StoreSettings, PayoutProvider } from "@/lib/storeSettings";
+import type { PayoutProvider } from "@/lib/storeSettings";
 
 const DEFAULT_COVER_IMAGE = "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80";
 
@@ -51,7 +52,8 @@ export default function NewProductPage() {
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
 
   // User Plan status: automatically synchronized from D1 Database
-  const [isPro, setIsPro] = useState(true);
+  const [isPro, setIsPro] = useState(false);
+  const [currentProductCount, setCurrentProductCount] = useState(0);
 
   // Form states
   const [title, setTitle] = useState("");
@@ -74,6 +76,7 @@ export default function NewProductPage() {
 
   // Pro Upgrade Modal state
   const [showProModal, setShowProModal] = useState(false);
+  const [modalReason, setModalReason] = useState<"storage" | "product_limit">("storage");
   const [attemptedFileSize, setAttemptedFileSize] = useState("");
 
   // Centralized Payout Settings (Defaults strictly to curiolot)
@@ -89,10 +92,10 @@ export default function NewProductPage() {
 
   const FREE_MAX_SIZE_MB = 50;
   const PRO_MAX_SIZE_GB = 2;
+  const FREE_PRODUCT_LIMIT = 5;
 
-  // 1. Fetch Payout Configuration & Pre-load Existing Product Details on Edit
+  // 1. Fetch Payout Configuration, User Plan, & Pre-load Existing Product Details on Edit
   useEffect(() => {
-    // Check local storage first for persisted handle
     if (typeof window !== "undefined") {
       const savedLocalHandle = localStorage.getItem("curiolot_paypal_handle");
       if (savedLocalHandle && savedLocalHandle !== "aries") {
@@ -101,7 +104,7 @@ export default function NewProductPage() {
     }
 
     // Synchronize account plan & payout gateways
-    fetch(`/api/settings?username=${username}`)
+    fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
         if (data) {
@@ -135,61 +138,67 @@ export default function NewProductPage() {
       })
       .catch((err) => console.error("Failed to load payout settings:", err));
 
-    // Detect ?edit=prod_... parameter from URL
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const targetId = params.get("edit");
-      if (targetId) {
-        setEditId(targetId);
-        setIsLoadingProduct(true);
+    // Fetch existing product count to enforce the 5 products limit
+    fetch(`/api/products?username=${encodeURIComponent(username)}`)
+      .then((res) => res.json())
+      .then((products: any) => {
+        if (Array.isArray(products)) {
+          setCurrentProductCount(products.length);
 
-        fetch(`/api/products?username=${username}`)
-          .then((res) => res.json())
-          .then((products: any) => {
-            if (Array.isArray(products)) {
-              const currentProduct = products.find((p: any) => p.id === targetId);
-              if (currentProduct) {
-                setTitle(currentProduct.title || "");
-                setSlug(currentProduct.slug || "");
-                setCategory(currentProduct.category || "E-Books & Guides");
-                setPrice(currentProduct.price !== undefined ? String(currentProduct.price) : "4.99");
-                setOriginalPrice(currentProduct.originalPrice ? String(currentProduct.originalPrice) : "");
-                setIsFree(currentProduct.price === 0);
-                setBadge(currentProduct.badge || "");
-                setCoverUrl(currentProduct.coverUrl || "");
-                setFileFormat(currentProduct.fileFormat || "PDF");
-                setProductFileSize(currentProduct.fileSize || "4.5 MB");
-                setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
-                setDescription(currentProduct.description || "");
+          // Detect ?edit=prod_... parameter from URL
+          const params = new URLSearchParams(window.location.search);
+          const targetId = params.get("edit");
 
-                // Robust parsing for What's Inside multiline text
-                const rawInside = currentProduct.whatsInside ?? currentProduct.whats_inside ?? currentProduct.features;
-                if (typeof rawInside === "string") {
-                  try {
-                    const parsed = JSON.parse(rawInside);
-                    if (Array.isArray(parsed)) {
-                      setFeatures(parsed.join("\n"));
-                    } else {
-                      setFeatures(rawInside);
-                    }
-                  } catch {
+          if (targetId) {
+            setEditId(targetId);
+            setIsLoadingProduct(true);
+            const currentProduct = products.find((p: any) => p.id === targetId);
+            if (currentProduct) {
+              setTitle(currentProduct.title || "");
+              setSlug(currentProduct.slug || "");
+              setCategory(currentProduct.category || "E-Books & Guides");
+              setPrice(currentProduct.price !== undefined ? String(currentProduct.price) : "4.99");
+              setOriginalPrice(currentProduct.originalPrice ? String(currentProduct.originalPrice) : "");
+              setIsFree(currentProduct.price === 0);
+              setBadge(currentProduct.badge || "");
+              setCoverUrl(currentProduct.coverUrl || "");
+              setFileFormat(currentProduct.fileFormat || "PDF");
+              setProductFileSize(currentProduct.fileSize || "4.5 MB");
+              setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
+              setDescription(currentProduct.description || "");
+
+              const rawInside = currentProduct.whatsInside ?? currentProduct.whats_inside ?? currentProduct.features;
+              if (typeof rawInside === "string") {
+                try {
+                  const parsed = JSON.parse(rawInside);
+                  if (Array.isArray(parsed)) {
+                    setFeatures(parsed.join("\n"));
+                  } else {
                     setFeatures(rawInside);
                   }
-                } else if (Array.isArray(rawInside)) {
-                  setFeatures(rawInside.join("\n"));
-                } else {
-                  setFeatures("");
+                } catch {
+                  setFeatures(rawInside);
                 }
+              } else if (Array.isArray(rawInside)) {
+                setFeatures(rawInside.join("\n"));
+              } else {
+                setFeatures("");
               }
             }
-          })
-          .catch((err) => console.error("Failed to load product for editing:", err))
-          .finally(() => setIsLoadingProduct(false));
-      }
-    }
-  }, [username]);
+            setIsLoadingProduct(false);
+          } else {
+            // New Product Creation: Check if Free Creator reached 5 products limit
+            if (!isPro && products.length >= FREE_PRODUCT_LIMIT) {
+              setModalReason("product_limit");
+              setShowProModal(true);
+            }
+          }
+        }
+      })
+      .catch((err) => console.error("Failed to load products count:", err));
+  }, [username, isPro]);
 
-  // 2. Auto-Locked Payment Destination URL (Guaranteed curiolot, never aries)
+  // 2. Auto-Locked Payment Destination URL
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -221,7 +230,6 @@ export default function NewProductPage() {
     }
   }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
 
-  // Active Gateway Label helper
   const getGatewayLabel = () => {
     switch (payoutProvider) {
       case "paypal": return "PayPal.Me Instant Payout";
@@ -234,7 +242,6 @@ export default function NewProductPage() {
     }
   };
 
-  // Title change handler
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setTitle(val);
@@ -248,7 +255,6 @@ export default function NewProductPage() {
     }
   };
 
-  // Upload product cover mockup image directly to Cloudflare R2 bucket (curiolot-media)
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -285,7 +291,7 @@ export default function NewProductPage() {
     }
   };
 
-  // Upload product file + auto-detect extension format & enforce plan limits
+  // Upload product file + enforce 50 MB Free vault limit
   const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -299,6 +305,7 @@ export default function NewProductPage() {
 
     if (!isPro && sizeInMB > FREE_MAX_SIZE_MB) {
       setAttemptedFileSize(`${sizeInMB.toFixed(1)} MB`);
+      setModalReason("storage");
       setShowProModal(true);
       if (productFileInputRef.current) productFileInputRef.current.value = "";
       return;
@@ -322,6 +329,13 @@ export default function NewProductPage() {
     e.preventDefault();
     if (!title || !slug) {
       alert("Please provide a valid product title.");
+      return;
+    }
+
+    // Client-side guard for 5 products limit
+    if (!editId && !isPro && currentProductCount >= FREE_PRODUCT_LIMIT) {
+      setModalReason("product_limit");
+      setShowProModal(true);
       return;
     }
 
@@ -360,7 +374,12 @@ export default function NewProductPage() {
         router.push("/dashboard/products");
       } else {
         const errorData: any = await res.json().catch(() => ({}));
-        alert(errorData.error || (editId ? "Failed to update product." : "Failed to publish product. Please check form inputs."));
+        if (res.status === 403) {
+          setModalReason("product_limit");
+          setShowProModal(true);
+        } else {
+          alert(errorData.error || (editId ? "Failed to update product." : "Failed to publish product. Please check form inputs."));
+        }
       }
     } catch (err) {
       console.error("Failed to persist product:", err);
@@ -392,7 +411,7 @@ export default function NewProductPage() {
             <span>Cancel & Back</span>
           </Link>
 
-          {/* Read-Only Plan Badge */}
+          {/* Plan & Quota Status Badge */}
           <div className="flex items-center gap-3">
             <div
               className={`text-[11px] font-semibold px-3.5 py-1.5 rounded-full border select-none ${
@@ -402,7 +421,9 @@ export default function NewProductPage() {
               }`}
               title="Plan status is managed centrally via Curiolot Admin"
             >
-              {isPro ? "★ Pro Plan Active (2 GB Vault)" : "Free Plan (50 MB Vault)"}
+              {isPro 
+                ? "★ Pro Plan Active (Unlimited • 2 GB Vault)" 
+                : `Free Plan (${currentProductCount}/${FREE_PRODUCT_LIMIT} Products • 50 MB Vault)`}
             </div>
             <span className="text-xs text-slate-400 font-medium hidden sm:inline">
               {editId ? "Editing Product" : "New Digital Asset"}
@@ -845,7 +866,7 @@ export default function NewProductPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  What's Inside (One per line)
+                  What&apos;s Inside (One per line)
                 </label>
                 <textarea
                   rows={3}
@@ -889,9 +910,9 @@ export default function NewProductPage() {
         </form>
       </main>
 
-      {/* POP-UP MODAL: Upgrade to Pro */}
+      {/* POP-UP MODAL: Upgrade to Pro (Storage Limit or 5-Product Limit) */}
       {showProModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
             <button
               onClick={() => setShowProModal(false)}
@@ -901,44 +922,60 @@ export default function NewProductPage() {
             </button>
 
             <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/60 flex items-center justify-center text-amber-600 mb-5">
-              <Lock className="w-6 h-6" />
+              {modalReason === "product_limit" ? <AlertTriangle className="w-6 h-6" /> : <Lock className="w-6 h-6" />}
             </div>
 
-            <h3 className="text-xl font-bold text-slate-900">Storage Limit Exceeded</h3>
+            <h3 className="text-xl font-bold text-slate-900">
+              {modalReason === "product_limit" ? "Product Limit Reached (5/5)" : "Storage Limit Exceeded"}
+            </h3>
+            
             <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
-              Your selected file ({attemptedFileSize}) exceeds the <strong>50 MB limit</strong> for Free accounts. Upgrade to <strong>Curiolot Pro</strong> to upload large digital archives up to <strong>2 GB</strong>.
+              {modalReason === "product_limit" ? (
+                <>
+                  Free Creator accounts can publish up to <strong>5 digital products</strong>. You currently have {currentProductCount} products in your store. Upgrade to <strong>Curiolot Pro</strong> to publish unlimited digital assets.
+                </>
+              ) : (
+                <>
+                  Your selected file ({attemptedFileSize}) exceeds the <strong>50 MB limit</strong> for Free accounts. Upgrade to <strong>Curiolot Pro</strong> to upload large digital archives up to <strong>2 GB</strong>.
+                </>
+              )}
             </p>
 
             <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2.5 text-xs text-slate-700">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span><strong>2 GB per file</strong> Cloudflare R2 vault storage</span>
+                <span><strong>Unlimited</strong> digital product listings (Free: Max 5)</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span><strong>Unlimited</strong> product editing & re-uploading</span>
+                <span><strong>2 GB per file</strong> Cloudflare R2 vault storage (Free: 50 MB)</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span><strong>0% platform transaction fee</strong> (keep 100% of sales)</span>
+                <span><strong>0% platform transaction fee</strong> (keep 100% of your sales)</span>
               </div>
             </div>
 
             <div className="mt-6 flex flex-col gap-2">
               <a
-                href="https://link.curiolot.com"
+                href="https://link.curiolot.com/pricing"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold text-center hover:bg-slate-800 transition shadow-sm active:scale-95"
               >
-                Contact Admin or Upgrade at link.curiolot.com
+                Upgrade to Curiolot Pro
               </a>
               <button
                 type="button"
-                onClick={() => setShowProModal(false)}
+                onClick={() => {
+                  setShowProModal(false);
+                  if (modalReason === "product_limit" && !editId) {
+                    router.push("/dashboard/products");
+                  }
+                }}
                 className="w-full py-2.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition cursor-pointer"
               >
-                Cancel & Upload Smaller File (Under 50 MB)
+                {modalReason === "product_limit" ? "Return to Products List" : "Cancel & Upload Smaller File (Under 50 MB)"}
               </button>
             </div>
           </div>
