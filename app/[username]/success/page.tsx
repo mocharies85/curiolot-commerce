@@ -15,7 +15,10 @@ import {
   Copy, 
   Check, 
   ExternalLink,
-  Loader2
+  Loader2,
+  MailCheck,
+  MessageSquare,
+  HelpCircle
 } from "lucide-react";
 
 interface Product {
@@ -40,14 +43,15 @@ function SuccessContent() {
   const orderId = searchParams.get("order_id") || `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
 
   const [product, setProduct] = useState<Product | null>(null);
+  const [sellerEmail, setSellerEmail] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
 
   const licenseKey = `CURIOLOT-LIC-${orderId}-VALID`;
 
-  // Ambil data produk asli dari D1 Database
   useEffect(() => {
+    // 1. Ambil data produk asli dari D1 Database
     fetch(`/api/products?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
@@ -65,7 +69,23 @@ function SuccessContent() {
           }
         }
       })
-      .catch((err) => console.error("Failed to load product details for success page:", err))
+      .catch((err) => console.error("Failed to load product details for success page:", err));
+
+    // 2. Ambil email kreator dari pengaturan untuk tujuan bantuan pelanggan
+    fetch(`/api/settings?username=${encodeURIComponent(username)}`)
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (data) {
+          const email = 
+            data.payoutPaypalHandle || 
+            data.paypalHandle || 
+            data.email || 
+            data.payout_paypal_email || 
+            "support@curiolot.com";
+          setSellerEmail(email);
+        }
+      })
+      .catch(() => setSellerEmail("support@curiolot.com"))
       .finally(() => setIsLoading(false));
   }, [username, productQuery]);
 
@@ -75,21 +95,18 @@ function SuccessContent() {
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  // Unduh file asli dari Cloudflare R2
+  // Unduh HANYA jika fileUrl asli dari R2 tersedia (tidak pernah unduh gambar cover)
   const handleTriggerDownload = () => {
-    // Ambil fileUrl asli atau fallback ke coverUrl jika fileUrl kosong
-    const targetDownloadUrl = product?.fileUrl || product?.coverUrl;
-
-    if (!targetDownloadUrl) {
-      alert("File asset is being synchronized. Please also check your checkout confirmation email for the direct download link.");
+    if (!product?.fileUrl) {
+      alert("Tautan file produk asli sedang diproses. Silakan hubungi penjual langsung lewat tombol bantuan di bawah jika file belum terunduh.");
       return;
     }
 
     setIsDownloading(true);
 
     const link = document.createElement("a");
-    link.href = targetDownloadUrl;
-    link.setAttribute("download", `${product?.title || "Asset"}.${(product?.fileFormat || "png").toLowerCase()}`);
+    link.href = product.fileUrl;
+    link.setAttribute("download", `${product?.title || "Asset"}.${(product?.fileFormat || "zip").toLowerCase()}`);
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");
     document.body.appendChild(link);
@@ -100,6 +117,13 @@ function SuccessContent() {
       setIsDownloading(false);
     }, 1200);
   };
+
+  // Template email bantuan otomatis untuk pembeli
+  const supportSubject = encodeURIComponent(`[Bantuan Pesanan #${orderId}] Kendala File: ${product?.title || "Digital Asset"}`);
+  const supportBody = encodeURIComponent(
+    `Halo ${username},\n\nSaya telah menyelesaikan pembayaran untuk produk berikut:\n- Produk: ${product?.title || "Digital Asset"}\n- Order Reference: ${orderId}\n- License Key: ${licenseKey}\n\nSaya menghubungi Anda terkait:\n[Tuliskan pertanyaan Anda atau lampirkan tangkapan layar bukti transfer pembayaran di sini]\n\nTerima kasih!`
+  );
+  const supportMailtoUrl = `mailto:${sellerEmail || "support@curiolot.com"}?subject=${supportSubject}&body=${supportBody}`;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased pb-20">
@@ -176,29 +200,37 @@ function SuccessContent() {
                   {isLoading ? "Loading product..." : product?.title || (productQuery || "Digital Asset")}
                 </h3>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  {product?.fileFormat || "Digital File"} • {product?.fileSize || "Cloud Vault"} • Lifetime License
+                  Format: <strong>{product?.fileFormat || "Digital File"}</strong> • {product?.fileSize || "Cloud Vault"} • Lifetime Commercial License
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleTriggerDownload}
-              disabled={isDownloading || isLoading}
-              className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Downloading...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  <span>Download {product?.fileFormat || "File"}</span>
-                </>
-              )}
-            </button>
+            {/* Tombol Unduh: Hanya Berfungsi Mengambil fileUrl Asli */}
+            {product?.fileUrl ? (
+              <button
+                type="button"
+                onClick={handleTriggerDownload}
+                disabled={isDownloading || isLoading}
+                className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Downloading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>Download {product?.fileFormat || "File"}</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-medium">
+                <MailCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                <span>Link sent to email receipt</span>
+              </div>
+            )}
           </div>
 
           {/* License & Verification Key */}
@@ -229,8 +261,29 @@ function SuccessContent() {
             </p>
           </div>
 
+          {/* Kartu Bantuan Pelanggan & Kontak Penjual */}
+          <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-sky-950">
+                <HelpCircle className="w-4 h-4 text-sky-600 shrink-0" />
+                <span>Kendala unduhan atau ingin melampirkan bukti bayar?</span>
+              </div>
+              <p className="text-[11px] text-sky-800/80 leading-relaxed">
+                Hubungi penjual langsung jika tautan tidak berjalan atau untuk mengirim konfirmasi transaksi.
+              </p>
+            </div>
+
+            <a
+              href={supportMailtoUrl}
+              className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-xs"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Hubungi Penjual</span>
+            </a>
+          </div>
+
           {/* Security Notice */}
-          <div className="pt-2 flex items-start gap-2.5 text-xs text-slate-500">
+          <div className="pt-1 flex items-start gap-2.5 text-xs text-slate-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
               Downloads are served directly from encrypted Cloudflare R2 storage. Single-use download links protect content integrity against unauthorized distribution.
@@ -239,12 +292,11 @@ function SuccessContent() {
 
         </div>
 
-        {/* Assistance / Support Links */}
-        <div className="text-xs text-slate-400 space-y-1">
-          <p>Need assistance with your files or unzipping instructions?</p>
+        {/* Footer Navigation */}
+        <div className="text-center pt-2">
           <Link
             href={`/${username}`}
-            className="text-slate-700 font-semibold hover:underline inline-flex items-center gap-1"
+            className="text-slate-700 font-semibold hover:underline inline-flex items-center gap-1 text-xs"
           >
             <span>Return to {username}&apos;s Storefront</span>
             <ExternalLink className="w-3 h-3" />
