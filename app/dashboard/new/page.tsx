@@ -103,14 +103,19 @@ export default function NewProductPage() {
       }
     }
 
-    // Synchronize account plan & payout gateways
+    // Synchronize account plan & payout gateways (Membaca semua variasi format nama)
     fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
         if (data) {
-          if (data.payoutProvider) setPayoutProvider(data.payoutProvider);
+          // 1. Resolusi Provider Aktif
+          const rawProvider = data.payoutProvider || data.payout_provider || data.provider;
+          if (rawProvider) {
+            setPayoutProvider(String(rawProvider).toLowerCase() as PayoutProvider);
+          }
           
-          const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.paypal_handle;
+          // 2. Resolusi PayPal Handle
+          const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.payout_paypal_handle || data.paypal_handle;
           if (rawHandle && rawHandle !== "aries") {
             setPaypalHandle(rawHandle);
             if (typeof window !== "undefined") {
@@ -120,13 +125,26 @@ export default function NewProductPage() {
             setPaypalHandle("curiolot");
           }
 
-          if (data.payoutStripeUrl) setStripeUrl(data.payoutStripeUrl);
-          if (data.payoutLemonSqueezyUrl) setLemonSqueezyUrl(data.payoutLemonSqueezyUrl);
-          if (data.payoutPaddleUrl) setPaddleUrl(data.payoutPaddleUrl);
-          if (data.payoutKofiUrl) setKofiUrl(data.payoutKofiUrl);
-          if (data.payoutCustomUrl) setCustomUrl(data.payoutCustomUrl);
+          // 3. Resolusi Lemon Squeezy URL
+          const rawLemon = data.payoutLemonSqueezyUrl || data.lemonSqueezyUrl || data.payout_lemonsqueezy_url || data.lemonsqueezy_url;
+          if (rawLemon) {
+            setLemonSqueezyUrl(rawLemon);
+          }
 
-          // Pro status verified from central settings
+          // 4. Resolusi Gateway Lainnya
+          const rawStripe = data.payoutStripeUrl || data.stripeUrl || data.payout_stripe_url;
+          if (rawStripe) setStripeUrl(rawStripe);
+
+          const rawPaddle = data.payoutPaddleUrl || data.paddleUrl || data.payout_paddle_url;
+          if (rawPaddle) setPaddleUrl(rawPaddle);
+
+          const rawKofi = data.payoutKofiUrl || data.kofiUrl || data.payout_kofi_url;
+          if (rawKofi) setKofiUrl(rawKofi);
+
+          const rawCustom = data.payoutCustomUrl || data.customUrl || data.payout_custom_url;
+          if (rawCustom) setCustomUrl(rawCustom);
+
+          // 5. Resolusi Status Pro Plan
           if (typeof data.isPro !== "undefined") {
             setIsPro(Boolean(data.isPro));
           } else if (data.plan) {
@@ -145,7 +163,6 @@ export default function NewProductPage() {
         if (Array.isArray(products)) {
           setCurrentProductCount(products.length);
 
-          // Detect ?edit=prod_... parameter from URL
           const params = new URLSearchParams(window.location.search);
           const targetId = params.get("edit");
 
@@ -198,12 +215,13 @@ export default function NewProductPage() {
       .catch((err) => console.error("Failed to load products count:", err));
   }, [username, isPro]);
 
-  // 2. Auto-Locked Payment Destination URL
+  // 2. Auto-Locked Payment Destination URL (Case-Insensitive Resolution)
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
+    const cleanProvider = String(payoutProvider || "paypal").toLowerCase().trim();
 
-    switch (payoutProvider) {
+    switch (cleanProvider) {
       case "stripe":
         return stripeUrl || "https://buy.stripe.com";
       case "lemonsqueezy":
@@ -231,7 +249,8 @@ export default function NewProductPage() {
   }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
 
   const getGatewayLabel = () => {
-    switch (payoutProvider) {
+    const cleanProvider = String(payoutProvider || "paypal").toLowerCase().trim();
+    switch (cleanProvider) {
       case "paypal": return "PayPal.Me Instant Payout";
       case "stripe": return "Stripe Checkout";
       case "lemonsqueezy": return "Lemon Squeezy Store";
