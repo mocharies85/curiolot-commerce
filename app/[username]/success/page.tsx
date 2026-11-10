@@ -61,7 +61,7 @@ function SuccessContent() {
           if (found) {
             setProduct(found);
           } else if (data.length > 0) {
-            setProduct(data[0]); // Fallback ke produk terbaru jika query kosong
+            setProduct(data[0]);
           }
         }
       })
@@ -77,7 +77,10 @@ function SuccessContent() {
 
   // Unduh file asli dari Cloudflare R2
   const handleTriggerDownload = () => {
-    if (!product?.fileUrl) {
+    // Ambil fileUrl asli atau fallback ke coverUrl jika fileUrl kosong
+    const targetDownloadUrl = product?.fileUrl || product?.coverUrl;
+
+    if (!targetDownloadUrl) {
       alert("File asset is being synchronized. Please also check your checkout confirmation email for the direct download link.");
       return;
     }
@@ -85,8 +88,8 @@ function SuccessContent() {
     setIsDownloading(true);
 
     const link = document.createElement("a");
-    link.href = product.fileUrl;
-    link.setAttribute("download", `${product.title || "Asset"}.${(product.fileFormat || "zip").toLowerCase()}`);
+    link.href = targetDownloadUrl;
+    link.setAttribute("download", `${product?.title || "Asset"}.${(product?.fileFormat || "png").toLowerCase()}`);
     link.setAttribute("target", "_blank");
     link.setAttribute("rel", "noopener noreferrer");
     document.body.appendChild(link);

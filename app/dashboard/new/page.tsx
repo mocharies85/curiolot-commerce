@@ -30,7 +30,6 @@ const DEFAULT_COVER_IMAGE = "https://images.unsplash.com/photo-1544716278-ca5e3f
 export default function NewProductPage() {
   const router = useRouter();
 
-  // Dynamically resolve active username from browser session
   const [username, setUsername] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const storedSession = localStorage.getItem("curiolot_session");
@@ -49,15 +48,12 @@ export default function NewProductPage() {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Edit Mode States
   const [editId, setEditId] = useState<string | null>(null);
   const [isLoadingProduct, setIsLoadingProduct] = useState(false);
 
-  // User Plan status: automatically synchronized from D1 Database
   const [isPro, setIsPro] = useState(false);
   const [currentProductCount, setCurrentProductCount] = useState(0);
 
-  // Form states
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [category, setCategory] = useState("E-Books & Guides");
@@ -76,16 +72,16 @@ export default function NewProductPage() {
   const [useCustomUrl, setUseCustomUrl] = useState(false);
   const [customProductUrl, setCustomProductUrl] = useState("");
 
-  // Product archive file state
+  // Product archive file state & R2 Upload
   const [productFileName, setProductFileName] = useState<string | null>(null);
   const [productFileSize, setProductFileSize] = useState<string | null>(null);
+  const [fileUrl, setFileUrl] = useState("");
+  const [isUploadingProductFile, setIsUploadingProductFile] = useState(false);
 
-  // Pro Upgrade Modal state
   const [showProModal, setShowProModal] = useState(false);
   const [modalReason, setModalReason] = useState<"storage" | "product_limit">("storage");
   const [attemptedFileSize, setAttemptedFileSize] = useState("");
 
-  // Centralized Payout Settings (Defaults strictly to curiolot)
   const [payoutProvider, setPayoutProvider] = useState<PayoutProvider>("paypal");
   const [paypalHandle, setPaypalHandle] = useState("curiolot");
   const [stripeUrl, setStripeUrl] = useState("");
@@ -100,7 +96,6 @@ export default function NewProductPage() {
   const PRO_MAX_SIZE_GB = 2;
   const FREE_PRODUCT_LIMIT = 5;
 
-  // 1. Fetch Payout Configuration, User Plan, & Pre-load Existing Product Details on Edit
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedLocalHandle = localStorage.getItem("curiolot_paypal_handle");
@@ -109,7 +104,6 @@ export default function NewProductPage() {
       }
     }
 
-    // Synchronize account plan & payout gateways
     fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
@@ -155,7 +149,6 @@ export default function NewProductPage() {
       })
       .catch((err) => console.error("Failed to load payout settings:", err));
 
-    // Fetch existing product count to enforce the 5 products limit
     fetch(`/api/products?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((products: any) => {
@@ -183,11 +176,13 @@ export default function NewProductPage() {
               setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
               setDescription(currentProduct.description || "");
 
-              // Cek apakah produk ini memiliki payment URL tersendiri
+              if (currentProduct.fileUrl) {
+                setFileUrl(currentProduct.fileUrl);
+              }
+
               const existingPayUrl = currentProduct.paymentUrl || currentProduct.sellerCheckoutUrl || "";
               if (existingPayUrl) {
                 setCustomProductUrl(existingPayUrl);
-                // Jika URL bukan format bawaan paypal standar, aktifkan mode custom
                 if (!existingPayUrl.includes("paypal.me/curiolot")) {
                   setUseCustomUrl(true);
                 }
@@ -223,7 +218,6 @@ export default function NewProductPage() {
       .catch((err) => console.error("Failed to load products count:", err));
   }, [username, isPro]);
 
-  // 2. Auto-Locked Default Global Payment Destination URL
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -256,7 +250,6 @@ export default function NewProductPage() {
     }
   }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
 
-  // Final Target URL (Resolves Custom or Global based on Toggle)
   const resolvedFinalPaymentUrl = useMemo(() => {
     if (isFree) return "";
     if (useCustomUrl && customProductUrl.trim()) {
@@ -327,7 +320,8 @@ export default function NewProductPage() {
     }
   };
 
-  const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload file arsip produk ke Cloudflare R2
+  const handleProductFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -358,6 +352,30 @@ export default function NewProductPage() {
         ? `${(sizeInMB / 1024).toFixed(2)} GB` 
         : `${sizeInMB.toFixed(1)} MB`
     );
+
+    setIsUploadingProductFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("username", username);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data: any = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to upload product file to Cloudflare R2.");
+      }
+
+      setFileUrl(data.url);
+    } catch (err: any) {
+      console.error("Product file upload error:", err);
+      alert("Product file upload failed: " + (err.message || "Network error"));
+    } finally {
+      setIsUploadingProductFile(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -388,6 +406,7 @@ export default function NewProductPage() {
       sellerCheckoutUrl: resolvedFinalPaymentUrl,
       fileFormat,
       fileSize: productFileSize || "4.5 MB",
+      fileUrl: fileUrl || coverUrl, // Simpan link file unduhan ke database D1
       license: "Standard Commercial License Included",
       description,
       features: features.split("\n").filter((f) => f.trim() !== ""),
@@ -631,7 +650,6 @@ export default function NewProductPage() {
                       </div>
                     </div>
 
-                    {/* Saklar ON/OFF Toggle Custom URL */}
                     <div className="flex items-center gap-2.5 self-start sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
                       <span className="text-[11px] font-bold text-slate-600 select-none">
                         Custom Link
@@ -654,7 +672,6 @@ export default function NewProductPage() {
                     </div>
                   </div>
 
-                  {/* Tampilan Kondisional: Input Manual (ON) atau Auto-locked (OFF) */}
                   {useCustomUrl ? (
                     <div className="space-y-2 pt-1 animate-in fade-in duration-150">
                       <div className="flex items-center justify-between">
@@ -876,7 +893,13 @@ export default function NewProductPage() {
                       : "border-slate-200 hover:border-slate-400 bg-slate-50/60 hover:bg-slate-100/50"
                   }`}
                 >
-                  {productFileName ? (
+                  {isUploadingProductFile ? (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                      <p className="text-xs font-bold text-slate-900">Uploading file to Cloudflare R2 Vault...</p>
+                      <p className="text-[11px] text-slate-400">Encrypting & preparing single-use download link</p>
+                    </div>
+                  ) : productFileName ? (
                     <div className="flex flex-col items-center gap-1.5">
                       <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
                         <FileCheck className="w-5 h-5" />
@@ -979,7 +1002,7 @@ export default function NewProductPage() {
             </Link>
             <button
               type="submit"
-              disabled={isSubmitting || isUploadingCover}
+              disabled={isSubmitting || isUploadingCover || isUploadingProductFile}
               className="px-8 py-3 rounded-2xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition active:scale-95 shadow-md shadow-slate-900/10 disabled:opacity-50 cursor-pointer flex items-center gap-2"
             >
               {isSubmitting ? (
