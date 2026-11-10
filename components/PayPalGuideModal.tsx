@@ -10,8 +10,6 @@ import {
   CheckCircle2, 
   Zap, 
   ShieldCheck, 
-  ArrowRight,
-  Globe,
   Settings
 } from "lucide-react";
 
@@ -26,7 +24,9 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
 
   if (!isOpen) return null;
 
-  const downloadUrl = `https://store.curiolot.com/${username || "{your-username}"}/success`;
+  // Sanitasi username agar selalu huruf kecil dan tidak kosong
+  const cleanUsername = username?.trim().toLowerCase() || "aries";
+  const downloadUrl = `https://store.curiolot.com/${cleanUsername}/success`;
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(downloadUrl);
@@ -71,11 +71,11 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
             </div>
             
             <p className="text-slate-400 text-[11px]">
-              Copy this URL now. You must paste it into your PayPal Website Preferences in Step 3.
+              Copy this URL now. You must paste it into your PayPal Website Preferences in Step 3 so buyers are redirected to their download page.
             </p>
 
             <div className="flex items-center gap-2">
-              <code className="flex-1 p-2.5 rounded-xl bg-slate-900 border border-slate-800 font-mono text-sky-400 text-xs overflow-x-auto">
+              <code className="flex-1 p-2.5 rounded-xl bg-slate-900 border border-slate-800 font-mono text-sky-400 text-xs overflow-x-auto select-all">
                 {downloadUrl}
               </code>
               <button
@@ -91,13 +91,30 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
 
           {/* STEP 2: Navigate in PayPal */}
           <div className="space-y-2">
-            <span className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">2</span>
-              Open Website Payment Preferences in PayPal
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-sky-500 text-slate-950 font-black text-[10px] flex items-center justify-center">2</span>
+                Open Website Payment Preferences in PayPal
+              </span>
+              <a
+                href="https://www.paypal.com/businessprofile/settings/website"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] text-sky-400 hover:underline inline-flex items-center gap-1 font-semibold"
+              >
+                <span>Direct Link</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
             <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-800 space-y-2 text-slate-300">
-              <p>1. Log in to your <a href="https://www.paypal.com" target="_blank" rel="noreferrer" className="text-sky-400 font-semibold underline inline-flex items-center gap-0.5">PayPal Business Account <ExternalLink className="w-3 h-3" /></a>.</p>
-              <p>2. Click the <strong>Settings (Gear Icon)</strong> in the top-right corner $\rightarrow$ <strong>Account Settings</strong>.</p>
+              <p>
+                1. Log in to your{" "}
+                <a href="https://www.paypal.com" target="_blank" rel="noreferrer" className="text-sky-400 font-semibold underline inline-flex items-center gap-0.5">
+                  PayPal Business Account <ExternalLink className="w-3 h-3" />
+                </a>.
+              </p>
+              <p>2. Click the <strong>Settings (Gear Icon)</strong> in the top-right corner &rarr; <strong>Account Settings</strong>.</p>
               <p>3. In the left sidebar under <strong>PRODUCTS & SERVICES</strong>, click <strong>Website payments</strong>.</p>
               <p>4. Next to <strong>Website preferences</strong>, click the <strong>Update</strong> button.</p>
             </div>
@@ -115,7 +132,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Auto Return for Website Payments: <span className="text-emerald-400">TURN ON</span></p>
+                  <p className="font-bold text-white text-xs">Auto Return for Website Payments: <span className="text-emerald-400 font-extrabold">TURN ON</span></p>
                   <p className="text-slate-400 text-[11px]">Paste your copied Download URL into the <strong>Return URL</strong> field and click <strong>Save</strong>.</p>
                 </div>
               </div>
@@ -124,7 +141,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Payment Data Transfer (PDT): <span className="text-emerald-400">TURN ON</span></p>
+                  <p className="font-bold text-white text-xs">Payment Data Transfer (PDT): <span className="text-emerald-400 font-extrabold">TURN ON</span></p>
                   <p className="text-slate-400 text-[11px]">Enables secure transmission of transaction confirmation tokens back to your store.</p>
                 </div>
               </div>
@@ -133,7 +150,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-amber-200 text-xs">Block Non-Encrypted Website Payments: <span className="text-amber-400 underline">TURN OFF</span></p>
+                  <p className="font-bold text-amber-200 text-xs">Block Non-Encrypted Website Payments: <span className="text-amber-400 underline font-extrabold">TURN OFF</span></p>
                   <p className="text-amber-200/80 text-[11px]">
                     <strong>CRITICAL:</strong> If this is kept Active, PayPal will reject all customer checkouts from your store. Keep it <strong>OFF (Nonaktif)</strong>.
                   </p>
@@ -144,7 +161,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <Zap className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">PayPal Account Optional: <span className="text-sky-400">TURN ON</span></p>
+                  <p className="font-bold text-white text-xs">PayPal Account Optional: <span className="text-sky-400 font-extrabold">TURN ON</span></p>
                   <p className="text-slate-400 text-[11px]">Allows global customers to pay via Credit/Debit card without creating a PayPal account.</p>
                 </div>
               </div>
@@ -153,7 +170,7 @@ export default function PayPalGuideModal({ isOpen, onClose, username }: PayPalGu
               <div className="p-3.5 rounded-2xl bg-slate-800/50 border border-slate-800 flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-bold text-white text-xs">Contact Phone & Express Checkout: <span className="text-slate-400">TURN OFF</span></p>
+                  <p className="font-bold text-white text-xs">Contact Phone & Express Checkout: <span className="text-slate-400 font-extrabold">TURN OFF</span></p>
                   <p className="text-slate-400 text-[11px]">Removes friction for buyers by skipping unnecessary phone and bank transfer prompts.</p>
                 </div>
               </div>
