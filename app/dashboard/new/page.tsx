@@ -19,7 +19,9 @@ import {
   Eye,
   Save,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Link2,
+  Globe
 } from "lucide-react";
 import type { PayoutProvider } from "@/lib/storeSettings";
 
@@ -70,6 +72,10 @@ export default function NewProductPage() {
   const [fileFormat, setFileFormat] = useState("PDF");
   const [badge, setBadge] = useState("New Release");
   
+  // Custom Payment Link Toggle States
+  const [useCustomUrl, setUseCustomUrl] = useState(false);
+  const [customProductUrl, setCustomProductUrl] = useState("");
+
   // Product archive file state
   const [productFileName, setProductFileName] = useState<string | null>(null);
   const [productFileSize, setProductFileSize] = useState<string | null>(null);
@@ -103,18 +109,16 @@ export default function NewProductPage() {
       }
     }
 
-    // Synchronize account plan & payout gateways (Membaca semua variasi format nama)
+    // Synchronize account plan & payout gateways
     fetch(`/api/settings?username=${encodeURIComponent(username)}`)
       .then((res) => res.json())
       .then((data: any) => {
         if (data) {
-          // 1. Resolusi Provider Aktif
           const rawProvider = data.payoutProvider || data.payout_provider || data.provider;
           if (rawProvider) {
             setPayoutProvider(String(rawProvider).toLowerCase() as PayoutProvider);
           }
           
-          // 2. Resolusi PayPal Handle
           const rawHandle = data.payoutPaypalHandle || data.paypalHandle || data.payout_paypal_handle || data.paypal_handle;
           if (rawHandle && rawHandle !== "aries") {
             setPaypalHandle(rawHandle);
@@ -125,13 +129,9 @@ export default function NewProductPage() {
             setPaypalHandle("curiolot");
           }
 
-          // 3. Resolusi Lemon Squeezy URL
           const rawLemon = data.payoutLemonSqueezyUrl || data.lemonSqueezyUrl || data.payout_lemonsqueezy_url || data.lemonsqueezy_url;
-          if (rawLemon) {
-            setLemonSqueezyUrl(rawLemon);
-          }
+          if (rawLemon) setLemonSqueezyUrl(rawLemon);
 
-          // 4. Resolusi Gateway Lainnya
           const rawStripe = data.payoutStripeUrl || data.stripeUrl || data.payout_stripe_url;
           if (rawStripe) setStripeUrl(rawStripe);
 
@@ -144,7 +144,6 @@ export default function NewProductPage() {
           const rawCustom = data.payoutCustomUrl || data.customUrl || data.payout_custom_url;
           if (rawCustom) setCustomUrl(rawCustom);
 
-          // 5. Resolusi Status Pro Plan
           if (typeof data.isPro !== "undefined") {
             setIsPro(Boolean(data.isPro));
           } else if (data.plan) {
@@ -184,6 +183,16 @@ export default function NewProductPage() {
               setProductFileName(currentProduct.title ? `${currentProduct.title}.${(currentProduct.fileFormat || "PDF").toLowerCase()}` : "Attached File");
               setDescription(currentProduct.description || "");
 
+              // Cek apakah produk ini memiliki payment URL tersendiri
+              const existingPayUrl = currentProduct.paymentUrl || currentProduct.sellerCheckoutUrl || "";
+              if (existingPayUrl) {
+                setCustomProductUrl(existingPayUrl);
+                // Jika URL bukan format bawaan paypal standar, aktifkan mode custom
+                if (!existingPayUrl.includes("paypal.me/curiolot")) {
+                  setUseCustomUrl(true);
+                }
+              }
+
               const rawInside = currentProduct.whatsInside ?? currentProduct.whats_inside ?? currentProduct.features;
               if (typeof rawInside === "string") {
                 try {
@@ -204,7 +213,6 @@ export default function NewProductPage() {
             }
             setIsLoadingProduct(false);
           } else {
-            // New Product Creation: Check if Free Creator reached 5 products limit
             if (!isPro && products.length >= FREE_PRODUCT_LIMIT) {
               setModalReason("product_limit");
               setShowProModal(true);
@@ -215,7 +223,7 @@ export default function NewProductPage() {
       .catch((err) => console.error("Failed to load products count:", err));
   }, [username, isPro]);
 
-  // 2. Auto-Locked Payment Destination URL (Case-Insensitive Resolution)
+  // 2. Auto-Locked Default Global Payment Destination URL
   const autoLockedPaymentUrl = useMemo(() => {
     if (isFree) return "";
     const numericPrice = parseFloat(price) || 0;
@@ -247,6 +255,15 @@ export default function NewProductPage() {
       }
     }
   }, [isFree, price, payoutProvider, paypalHandle, stripeUrl, lemonSqueezyUrl, paddleUrl, kofiUrl, customUrl]);
+
+  // Final Target URL (Resolves Custom or Global based on Toggle)
+  const resolvedFinalPaymentUrl = useMemo(() => {
+    if (isFree) return "";
+    if (useCustomUrl && customProductUrl.trim()) {
+      return customProductUrl.trim();
+    }
+    return autoLockedPaymentUrl;
+  }, [isFree, useCustomUrl, customProductUrl, autoLockedPaymentUrl]);
 
   const getGatewayLabel = () => {
     const cleanProvider = String(payoutProvider || "paypal").toLowerCase().trim();
@@ -310,7 +327,6 @@ export default function NewProductPage() {
     }
   };
 
-  // Upload product file + enforce 50 MB Free vault limit
   const handleProductFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -351,7 +367,6 @@ export default function NewProductPage() {
       return;
     }
 
-    // Client-side guard for 5 products limit
     if (!editId && !isPro && currentProductCount >= FREE_PRODUCT_LIMIT) {
       setModalReason("product_limit");
       setShowProModal(true);
@@ -369,8 +384,8 @@ export default function NewProductPage() {
       originalPrice: isFree || !originalPrice ? null : parseFloat(originalPrice) || null,
       badge: badge.trim() || undefined,
       coverUrl: coverUrl || DEFAULT_COVER_IMAGE,
-      paymentUrl: autoLockedPaymentUrl,
-      sellerCheckoutUrl: autoLockedPaymentUrl,
+      paymentUrl: resolvedFinalPaymentUrl,
+      sellerCheckoutUrl: resolvedFinalPaymentUrl,
       fileFormat,
       fileSize: productFileSize || "4.5 MB",
       license: "Standard Commercial License Included",
@@ -430,7 +445,6 @@ export default function NewProductPage() {
             <span>Cancel & Back</span>
           </Link>
 
-          {/* Plan & Quota Status Badge */}
           <div className="flex items-center gap-3">
             <div
               className={`text-[11px] font-semibold px-3.5 py-1.5 rounded-full border select-none ${
@@ -535,13 +549,13 @@ export default function NewProductPage() {
             </div>
           </div>
 
-          {/* Section: Pricing & Automated Payout Routing */}
+          {/* Section: Pricing & Payment Settlement */}
           <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 space-y-6 shadow-xs">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">Pricing & Payment Settlement</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Set product pricing. Payment destination is automatically synchronized from your central Earnings profile.
+                  Set product pricing and destination checkout routing.
                 </p>
               </div>
               
@@ -596,43 +610,100 @@ export default function NewProductPage() {
                   </div>
                 </div>
 
-                <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                {/* Card Pengaturan Gateway Pembayaran */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+                  
+                  {/* Header Gateway & Toggle Switch Custom URL */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200/80">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                        <Lock className="w-4 h-4" />
+                        {useCustomUrl ? <Link2 className="w-4 h-4 text-indigo-600" /> : <Lock className="w-4 h-4" />}
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-900">
-                          Active Gateway: {getGatewayLabel()}
+                          {useCustomUrl ? "Mode: Custom Product Checkout URL" : `Active Gateway: ${getGatewayLabel()}`}
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          Pre-configured globally via your central Earnings profile.
+                          {useCustomUrl 
+                            ? "Using a dedicated product-specific checkout link." 
+                            : "Pre-configured globally via your central Earnings profile."}
                         </p>
                       </div>
                     </div>
 
-                    <Link
-                      href="/dashboard/earnings"
-                      className="text-[11px] font-bold text-indigo-600 hover:underline flex items-center gap-1 self-start sm:self-auto"
-                    >
-                      <span>Manage Payout Settings</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </Link>
+                    {/* Saklar ON/OFF Toggle Custom URL */}
+                    <div className="flex items-center gap-2.5 self-start sm:self-auto bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="text-[11px] font-bold text-slate-600 select-none">
+                        Custom Link
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={useCustomUrl}
+                        onClick={() => setUseCustomUrl(!useCustomUrl)}
+                        className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer ${
+                          useCustomUrl ? "bg-indigo-600" : "bg-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${
+                            useCustomUrl ? "translate-x-4" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200/80">
-                    <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono">
-                      <span className="text-slate-400 text-[11px]">Auto-locked Checkout URL:</span>
-                      <span className="font-bold text-emerald-700 truncate max-w-[280px] sm:max-w-md">
-                        {autoLockedPaymentUrl}
-                      </span>
+                  {/* Tampilan Kondisional: Input Manual (ON) atau Auto-locked (OFF) */}
+                  {useCustomUrl ? (
+                    <div className="space-y-2 pt-1 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold text-slate-700">
+                          Direct Checkout / Payment Link for this Product *
+                        </label>
+                        <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                          Override Active
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="url"
+                          required={useCustomUrl && !isFree}
+                          placeholder="https://curiolot.lemonsqueezy.com/buy/... or direct payment link"
+                          value={customProductUrl}
+                          onChange={(e) => setCustomProductUrl(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white text-xs font-mono rounded-xl border border-indigo-300 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 focus:outline-none transition shadow-2xs text-slate-900 font-semibold"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500">
+                        Paste the exact product variant checkout link from your payment provider (e.g., Lemon Squeezy, Stripe, or personal merchant gateway).
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 mt-1.5 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                      <span>100% of customer funds route directly to your account. Curiolot takes a 0% platform fee.</span>
-                    </p>
-                  </div>
+                  ) : (
+                    <div className="pt-1">
+                      <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-xs font-mono">
+                        <span className="text-slate-400 text-[11px]">Auto-locked Checkout URL:</span>
+                        <span className="font-bold text-emerald-700 truncate max-w-[280px] sm:max-w-md">
+                          {autoLockedPaymentUrl}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 text-[10px] text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>100% of customer funds route directly to your account.</span>
+                        </span>
+                        <Link
+                          href="/dashboard/earnings"
+                          className="font-bold text-indigo-600 hover:underline flex items-center gap-0.5"
+                        >
+                          <span>Manage Earnings</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
             ) : (
@@ -929,7 +1000,7 @@ export default function NewProductPage() {
         </form>
       </main>
 
-      {/* POP-UP MODAL: Upgrade to Pro (Storage Limit or 5-Product Limit) */}
+      {/* POP-UP MODAL: Upgrade to Pro */}
       {showProModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative text-left">
