@@ -47,11 +47,11 @@ const CATEGORIES = [
   { name: "Special Deals", icon: Percent, match: [] as string[], highlight: true },
 ];
 
-// Helper kalkulasi status keaktifan kreator
+// Helper calculation for creator activity status (US/EU Global English Standard)
 function getCreatorActivityStatus(lastActiveDateString?: string | null) {
   if (!lastActiveDateString) {
     return {
-      label: "Aktif baru saja",
+      label: "Active just now",
       color: "emerald" as const,
       isWarning: false,
     };
@@ -60,7 +60,7 @@ function getCreatorActivityStatus(lastActiveDateString?: string | null) {
   const lastActive = new Date(lastActiveDateString).getTime();
   if (isNaN(lastActive)) {
     return {
-      label: "Aktif baru saja",
+      label: "Active just now",
       color: "emerald" as const,
       isWarning: false,
     };
@@ -70,47 +70,47 @@ function getCreatorActivityStatus(lastActiveDateString?: string | null) {
   const diffInHours = Math.floor((now - lastActive) / (1000 * 60 * 60));
   const diffInDays = Math.floor(diffInHours / 24);
 
-  // 1. Kurang dari 24 jam
+  // 1. Less than 24 hours
   if (diffInHours < 24) {
     return {
-      label: diffInHours <= 1 ? "Online baru saja" : `Aktif ${diffInHours} jam lalu`,
+      label: diffInHours <= 1 ? "Active just now" : `Active ${diffInHours}h ago`,
       color: "emerald" as const,
       isWarning: false,
     };
   }
 
-  // 2. Dalam 7 hari terakhir
+  // 2. Within last 7 days
   if (diffInDays < 7) {
     return {
-      label: `Aktif ${diffInDays} hari lalu`,
+      label: `Active ${diffInDays}d ago`,
       color: "emerald" as const,
       isWarning: false,
     };
   }
 
-  // 3. Dalam 30 hari terakhir
+  // 3. Within last 30 days
   if (diffInDays <= 30) {
     const weeks = Math.floor(diffInDays / 7);
     return {
-      label: `Aktif ${weeks} minggu lalu`,
+      label: `Active ${weeks}w ago`,
       color: "amber" as const,
       isWarning: false,
     };
   }
 
-  // 4. Lebih dari 90 hari (3 bulan tidak aktif) -> Status Peringatan Pembeli
+  // 4. Over 90 days (> 3 months inactive) -> Buyer Advisory Warning
   if (diffInDays > 90) {
     return {
-      label: "Perhatian: Tidak aktif > 3 bulan",
+      label: "Notice: Inactive > 3 months",
       color: "rose" as const,
       isWarning: true,
     };
   }
 
-  // Antara 1 - 3 bulan
+  // Between 1 - 3 months
   const months = Math.floor(diffInDays / 30);
   return {
-    label: `Aktif ${months} bulan lalu`,
+    label: `Active ${months}mo ago`,
     color: "amber" as const,
     isWarning: false,
   };
@@ -458,7 +458,7 @@ export default function StoreView({ username }: StoreViewProps) {
 
   const hasHeroText = showBadge || showTitle || showDesc;
 
-  // Hitung status keaktifan kreator untuk ditampilkan ke pembeli
+  // Compute creator activity status for international buyers
   const creatorActivity = useMemo(() => {
     const rawTime = (settings as any)?.lastActiveAt || (settings as any)?.last_active_at || (settings as any)?.updated_at;
     return getCreatorActivityStatus(rawTime);
@@ -470,7 +470,7 @@ export default function StoreView({ username }: StoreViewProps) {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-24 flex items-center justify-between gap-4">
           
-          {/* Brand Identity & Logo & Indikator Keaktifan */}
+          {/* Brand Identity & Logo & Activity Badge */}
           <div className="flex items-center gap-4 shrink-0">
             <div className="shrink-0">
               {storeLogo && !logoFailed ? (
@@ -497,7 +497,7 @@ export default function StoreView({ username }: StoreViewProps) {
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100 shrink-0" />
               </div>
 
-              {/* Status Bar: Toko Resmi & Indikator Keaktifan */}
+              {/* Status Bar: Storefront Badge & English Activity Indicator */}
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 <p className="text-xs text-slate-400 font-medium">Official Creator Storefront</p>
                 <span className="text-slate-300 text-xs hidden sm:inline">•</span>
@@ -682,7 +682,7 @@ export default function StoreView({ username }: StoreViewProps) {
       {/* 4. Product Catalog & Promo Grid */}
       <section id="products" className="max-w-7xl mx-auto px-4 sm:px-6 pt-12">
         
-        {/* Banner Peringatan Khusus Pembeli jika Kreator Tidak Aktif > 3 Bulan */}
+        {/* Global English Buyer Advisory Banner if Inactive > 3 Months */}
         {creatorActivity.isWarning && (
           <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
@@ -690,7 +690,7 @@ export default function StoreView({ username }: StoreViewProps) {
                 <AlertCircle className="w-4 h-4" />
               </div>
               <p className="leading-relaxed">
-                <strong>Peringatan Pembeli:</strong> Kreator toko ini belum aktif selama lebih dari 3 bulan. Kami menyarankan untuk menghubungi kreator terlebih dahulu sebelum melakukan transaksi pembayaran.
+                <strong>Buyer Advisory:</strong> This store creator has been inactive for over 3 months. We recommend reaching out prior to purchasing digital assets.
               </p>
             </div>
             <a
@@ -698,7 +698,7 @@ export default function StoreView({ username }: StoreViewProps) {
               target="_self"
               className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shrink-0 self-end sm:self-auto"
             >
-              Cek Kontak Kreator
+              Contact Creator
             </a>
           </div>
         )}
