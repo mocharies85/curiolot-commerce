@@ -127,15 +127,10 @@ export default function DashboardLayout({
               <div className="pt-2 mt-2 border-t border-slate-100">
                 <a
                   href="https://link.curiolot.com/admin"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/70 transition"
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/70 transition"
                 >
-                  <span className="flex items-center gap-3">
-                    <Link2 className="w-4 h-4 text-emerald-600" />
-                    <span>Curiolot Link</span>
-                  </span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition" />
+                  <Link2 className="w-4 h-4 text-emerald-600" />
+                  <span>Curiolot Link</span>
                 </a>
               </div>
             </nav>
