@@ -3,18 +3,19 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  Plus, 
-  LayoutDashboard, 
-  Package, 
+import {
+  Plus,
+  LayoutDashboard,
+  Package,
   Compass,
-  Image as ImageIcon, 
-  Store, 
-  DollarSign, 
-  Share2, 
+  Image as ImageIcon,
+  Store,
+  DollarSign,
+  Share2,
   ExternalLink,
   Bell,
-  Sparkles
+  Sparkles,
+  Link2,
 } from "lucide-react";
 import CuriolotLogo from "@/components/CuriolotLogo";
 
@@ -25,7 +26,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
 
-  // State pengguna dinamis berdasarkan sesi login aktif
+  // Dynamic user state based on active login session
   const [currentUser, setCurrentUser] = useState({
     name: "Creator",
     username: "vanth",
@@ -37,11 +38,11 @@ export default function DashboardLayout({
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          const resolvedUsername = 
-            parsed.username || 
+          const resolvedUsername =
+            parsed.username ||
             (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "creator");
-          const resolvedName = 
-            parsed.name || 
+          const resolvedName =
+            parsed.name ||
             resolvedUsername.charAt(0).toUpperCase() + resolvedUsername.slice(1);
 
           setCurrentUser({
@@ -73,7 +74,6 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex font-sans antialiased">
-      
       {/* 1. Left Sidebar Navigation */}
       <aside className="w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 fixed inset-y-0 left-0 z-50">
         <div>
@@ -98,9 +98,9 @@ export default function DashboardLayout({
             <nav className="space-y-1 pt-2">
               {NAV_ITEMS.map((item) => {
                 const Icon = item.icon;
-                const isActive = 
-                  item.href === "/dashboard" 
-                    ? pathname === "/dashboard" 
+                const isActive =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
                     : pathname.startsWith(item.href);
 
                 return (
@@ -113,11 +113,31 @@ export default function DashboardLayout({
                         : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 ${isActive ? "text-emerald-600" : "text-slate-400"}`} />
+                    <Icon
+                      className={`w-4 h-4 ${
+                        isActive ? "text-emerald-600" : "text-slate-400"
+                      }`}
+                    />
                     <span>{item.label}</span>
                   </Link>
                 );
               })}
+
+              {/* Cross-App Shortcut: Curiolot Link Dashboard */}
+              <div className="pt-2 mt-2 border-t border-slate-100">
+                <a
+                  href="https://link.curiolot.com/admin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-emerald-800 hover:bg-emerald-50/70 transition"
+                >
+                  <span className="flex items-center gap-3">
+                    <Link2 className="w-4 h-4 text-emerald-600" />
+                    <span>Curiolot Link</span>
+                  </span>
+                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition" />
+                </a>
+              </div>
             </nav>
           </div>
         </div>
@@ -138,8 +158,12 @@ export default function DashboardLayout({
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold text-slate-900 truncate">{currentUser.name}</p>
-              <p className="text-[10px] text-slate-400 truncate">store.curiolot.com/{currentUser.username}</p>
+              <p className="text-xs font-bold text-slate-900 truncate">
+                {currentUser.name}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">
+                store.curiolot.com/{currentUser.username}
+              </p>
             </div>
           </div>
         </div>
@@ -147,15 +171,14 @@ export default function DashboardLayout({
 
       {/* 2. Main Content Canvas */}
       <div className="flex-1 ml-64 flex flex-col min-h-screen">
-        
         {/* Top Header Navbar */}
         <header className="h-16 bg-white border-b border-slate-200/80 px-8 flex items-center justify-between sticky top-0 z-40">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
             <span>Store Dashboard</span>
             <span>/</span>
             <span className="text-slate-900 font-bold capitalize">
-              {pathname === "/dashboard" 
-                ? "Creator Hub" 
+              {pathname === "/dashboard"
+                ? "Creator Hub"
                 : pathname.split("/").pop()?.replace("-", " ")}
             </span>
           </div>
@@ -166,8 +189,8 @@ export default function DashboardLayout({
               <span>Pro Plan Active</span>
             </div>
 
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="w-9 h-9 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 transition cursor-pointer"
             >
               <Bell className="w-4 h-4" />
@@ -176,12 +199,8 @@ export default function DashboardLayout({
         </header>
 
         {/* Dynamic Page Body */}
-        <main className="flex-1 p-8">
-          {children}
-        </main>
-
+        <main className="flex-1 p-8">{children}</main>
       </div>
-
     </div>
   );
 }
