@@ -71,7 +71,11 @@ export default function EarningsPage() {
         if (data) {
           if (data.payoutProvider) setProvider(data.payoutProvider);
           if (data.payoutPaypalHandle !== undefined) {
-            setPaypalHandle(data.payoutPaypalHandle || "");
+            const cleanHandle =
+              username !== "aries" && data.payoutPaypalHandle === "curiolot"
+                ? ""
+                : data.payoutPaypalHandle || "";
+            setPaypalHandle(cleanHandle);
           }
           if (data.payoutStripeUrl !== undefined) {
             setStripeUrl(data.payoutStripeUrl || "");
@@ -323,7 +327,7 @@ export default function EarningsPage() {
                     Your PayPal.Me Username *
                   </label>
                   <div className="flex items-center rounded-xl border border-slate-200 bg-white overflow-hidden focus-within:border-slate-900 transition">
-                    <span className="pl-4 text-xs text-slate-400 font-mono">
+                    <span className="pl-4 text-xs text-slate-400 font-mono select-none">
                       https://paypal.me/
                     </span>
                     <input
@@ -331,8 +335,8 @@ export default function EarningsPage() {
                       required
                       value={paypalHandle}
                       onChange={(e) => setPaypalHandle(e.target.value)}
-                      placeholder="yourhandle"
-                      className="w-full px-2 py-3 bg-transparent text-xs font-bold text-slate-900 focus:outline-none"
+                      placeholder="your username e.g. robert or etc"
+                      className="w-full px-2 py-3 bg-transparent text-xs font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:outline-none"
                     />
                   </div>
                 </div>
