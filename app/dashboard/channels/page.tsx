@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Globe, 
-  ArrowUpRight, 
-  Check, 
-  Copy, 
-  Share2, 
-  ExternalLink,
+import {
+  Globe,
+  ArrowUpRight,
+  Check,
+  Copy,
+  Share2,
   Sparkles,
-  CheckCircle2
 } from "lucide-react";
 
 // Komponen SVG Ikon Brand Global (Aman dari error ts2305 lucide-react)
@@ -24,7 +22,7 @@ function XTwitterIcon({ className = "w-4 h-4" }: { className?: string }) {
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12.031 2C6.511 2 2.025 6.486 2.025 12.006a10.02 10.02 0 0 0 1.558 5.378L2 22l4.767-1.533a9.98 9.98 0 0 0 5.264 1.499h.005c5.518 0 10.005-4.486 10.005-10.006C22.041 6.486 17.553 2 12.031 2zm5.835 14.167c-.244.685-1.42 1.309-1.954 1.392-.505.078-1.157.111-3.73-.956-3.292-1.365-5.385-4.733-5.55-4.952-.162-.22-1.332-1.773-1.332-3.382 0-1.608.84-2.4 1.141-2.724.301-.325.656-.407.876-.407.218 0 .438.002.63.011.203.01.474-.077.74.563.277.669.946 2.308 1.03 2.477.083.17.139.37.027.59-.111.22-.166.357-.33.551-.166.195-.349.435-.498.585-.166.166-.339.347-.146.678.194.33 861 1.417 1.848 2.296 1.272 1.134 2.345 1.485 2.676 1.65.331.166.525.138.718-.083.194-.22.83-965 1.052-1.296.22-.331.443-.277.743-.166.301.111 1.908.9 2.235 1.065.328.166.547.248.629.387.083.138.083.805-.161 1.49z" />
+      <path d="M12.031 2C6.511 2 2.025 6.486 2.025 12.006a10.02 10.02 0 0 0 1.558 5.378L2 22l4.767-1.533a9.98 9.98 0 0 0 5.264 1.499h.005c5.518 0 10.005-4.486 10.005-10.006C22.041 6.486 17.553 2 12.031 2zm5.835 14.167c-.244.685-1.42 1.309-1.954 1.392-.505.078-1.157.111-3.73-.956-3.292-1.365-5.385-4.733-5.55-4.952-.162-.22-1.332-1.773-1.332-3.382 0-1.608.84-2.4 1.141-2.724.301-.325.656-.407.876-.407.218 0 .438.002.63.011.203.01.474-.077.74.563.277.669.946 2.308 1.03 2.477.083.17.139.37.027.59-.111.22-.166.357-.33.551-.166.195-.349.435-.498.585-.166.166-.339.347-.146.678.194.33.861 1.417 1.848 2.296 1.272 1.134 2.345 1.485 2.676 1.65.331.166.525.138.718-.083.194-.22.83-.965 1.052-1.296.22-.331.443-.277.743-.166.301.111 1.908.9 2.235 1.065.328.166.547.248.629.387.083.138.083.805-.161 1.49z" />
     </svg>
   );
 }
@@ -71,7 +69,15 @@ function YoutubeIcon({ className = "w-5 h-5" }: { className?: string }) {
 
 function InstagramIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
       <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
@@ -80,14 +86,32 @@ function InstagramIcon({ className = "w-5 h-5" }: { className?: string }) {
 }
 
 export default function SalesChannelsPage() {
-  const [username, setUsername] = useState("aries");
+  const [username, setUsername] = useState<string>("");
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Ambil username dinamis dari pengaturan toko
+  // Ambil username dinamis dari sesi login aktif & pengaturan toko
   useEffect(() => {
-    fetch("/api/settings?username=aries")
+    let resolvedUsername = "creator";
+
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("curiolot_session");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          resolvedUsername =
+            parsed.username ||
+            (parsed.email
+              ? parsed.email.split("@")[0].toLowerCase()
+              : "creator");
+        } catch (e) {}
+      }
+    }
+
+    setUsername(resolvedUsername);
+
+    fetch(`/api/settings?username=${encodeURIComponent(resolvedUsername)}`)
       .then((res) => res.json())
-      .then((data) => {
+      .then((data: any) => {
         if (data?.username) {
           setUsername(data.username);
         }
@@ -95,8 +119,9 @@ export default function SalesChannelsPage() {
       .catch((err) => console.error(err));
   }, []);
 
-  const storeUrl = `https://store.curiolot.com/${username}`;
-  const bioLinkUrl = `https://link.curiolot.com/${username}`;
+  const activeUser = username || "creator";
+  const storeUrl = `https://store.curiolot.com/${activeUser}`;
+  const bioLinkUrl = `https://link.curiolot.com/${activeUser}`;
   const shareText = `Check out my official digital assets and e-books on Curiolot Store!`;
 
   const handleCopy = () => {
@@ -111,53 +136,55 @@ export default function SalesChannelsPage() {
       name: "X (Twitter)",
       icon: XTwitterIcon,
       bgColor: "bg-black hover:bg-zinc-800 text-white",
-      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(storeUrl)}`
+      href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(storeUrl)}`,
     },
     {
       name: "WhatsApp",
       icon: WhatsAppIcon,
       bgColor: "bg-emerald-600 hover:bg-emerald-700 text-white",
-      href: `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + storeUrl)}`
+      href: `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + storeUrl)}`,
     },
     {
       name: "Facebook",
       icon: FacebookIcon,
       bgColor: "bg-blue-600 hover:bg-blue-700 text-white",
-      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(storeUrl)}`
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(storeUrl)}`,
     },
     {
       name: "LinkedIn",
       icon: LinkedInIcon,
       bgColor: "bg-sky-700 hover:bg-sky-800 text-white",
-      href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(storeUrl)}`
+      href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(storeUrl)}`,
     },
     {
       name: "Pinterest",
       icon: PinterestIcon,
       bgColor: "bg-rose-600 hover:bg-rose-700 text-white",
-      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(storeUrl)}&description=${encodeURIComponent(shareText)}`
+      href: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(storeUrl)}&description=${encodeURIComponent(shareText)}`,
     },
     {
       name: "Telegram",
       icon: TelegramIcon,
       bgColor: "bg-sky-500 hover:bg-sky-600 text-white",
-      href: `https://t.me/share/url?url=${encodeURIComponent(storeUrl)}&text=${encodeURIComponent(shareText)}`
-    }
+      href: `https://t.me/share/url?url=${encodeURIComponent(storeUrl)}&text=${encodeURIComponent(shareText)}`,
+    },
   ];
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Sales Channels & Social Media</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          Sales Channels & Social Media
+        </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Connect your sales endpoints and promote your digital storefront across global social networks.
+          Connect your sales endpoints and promote your digital storefront
+          across global social networks.
         </p>
       </div>
 
       {/* Main Channels 3-Card Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        
         {/* Channel 1: Curiolot Bio Link (Dinamis Sesuai Akun) */}
         <div className="bg-white rounded-3xl border border-slate-200/80 p-6 space-y-5 shadow-xs flex flex-col justify-between">
           <div className="space-y-3">
@@ -166,16 +193,20 @@ export default function SalesChannelsPage() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900">Curiolot Bio Link</h3>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Curiolot Bio Link
+                </h3>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                   Connected
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Your digital storefront is automatically linked to your primary profile handle at{" "}
+                Your digital storefront is automatically linked to your primary
+                profile handle at{" "}
                 <code className="text-indigo-600 font-semibold bg-indigo-50/70 px-1.5 py-0.5 rounded">
-                  link.curiolot.com/{username}
-                </code>.
+                  link.curiolot.com/{activeUser}
+                </code>
+                .
               </p>
             </div>
           </div>
@@ -198,16 +229,24 @@ export default function SalesChannelsPage() {
               <YoutubeIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Sell on YouTube</h3>
+              <h3 className="text-sm font-bold text-slate-900">
+                Sell on YouTube
+              </h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Connect your YouTube channel to embed direct product checkout cards and discount links across YouTube Shorts and video descriptions.
+                Connect your YouTube channel to embed direct product checkout
+                cards and discount links across YouTube Shorts and video
+                descriptions.
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => alert(`Connect YouTube channel for @${username} to enable automated video product cards.`)}
+            onClick={() =>
+              alert(
+                `Connect YouTube channel for @${activeUser} to enable automated video product cards.`
+              )
+            }
             className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition cursor-pointer active:scale-95"
           >
             Connect YouTube Channel
@@ -221,9 +260,12 @@ export default function SalesChannelsPage() {
               <InstagramIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Instagram & TikTok Bio</h3>
+              <h3 className="text-sm font-bold text-slate-900">
+                Instagram & TikTok Bio
+              </h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Copy your vanity store URL to paste into your Instagram, TikTok, or Twitter bio for instant direct traffic.
+                Copy your vanity store URL to paste into your Instagram, TikTok,
+                or Twitter bio for instant direct traffic.
               </p>
             </div>
           </div>
@@ -232,8 +274,8 @@ export default function SalesChannelsPage() {
             type="button"
             onClick={handleCopy}
             className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-              copiedLink 
-                ? "bg-emerald-600 text-white" 
+              copiedLink
+                ? "bg-emerald-600 text-white"
                 : "border border-slate-200 hover:bg-slate-50 text-slate-700"
             }`}
           >
@@ -250,7 +292,6 @@ export default function SalesChannelsPage() {
             )}
           </button>
         </div>
-
       </div>
 
       {/* GLOBAL 1-CLICK SOCIAL MEDIA SHARING PANEL */}
@@ -262,7 +303,8 @@ export default function SalesChannelsPage() {
               <span>Instant 1-Click Social Media Broadcast</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Broadcast your store link directly to the world's most widely used social media networks.
+              Broadcast your store link directly to the world's most widely used
+              social media networks.
             </p>
           </div>
           <span className="text-[11px] font-mono text-slate-500 bg-slate-100 px-3 py-1 rounded-full truncate">
@@ -294,7 +336,11 @@ export default function SalesChannelsPage() {
         <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3 text-xs text-slate-600">
           <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong>Creator Tip:</strong> Sharing your store link immediately after publishing new digital assets drives high launch-day momentum. For Instagram and TikTok, placing <strong>store.curiolot.com/{username}</strong> in your bio converts profile visitors directly into customers.
+            <strong>Creator Tip:</strong> Sharing your store link immediately
+            after publishing new digital assets drives high launch-day
+            momentum. For Instagram and TikTok, placing{" "}
+            <strong>store.curiolot.com/{activeUser}</strong> in your bio
+            converts profile visitors directly into customers.
           </p>
         </div>
       </div>
