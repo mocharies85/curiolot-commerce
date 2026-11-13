@@ -91,40 +91,43 @@ export default function SalesChannelsPage() {
 
   // Ambil username dinamis dari sesi login aktif & pengaturan toko
   useEffect(() => {
-    let resolvedUsername = "creator";
-
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("curiolot_session");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          resolvedUsername =
-            parsed.username ||
-            (parsed.email
-              ? parsed.email.split("@")[0].toLowerCase()
-              : "creator");
-        } catch (e) {}
-      }
+      if (!stored) return;
+
+      try {
+        const parsed = JSON.parse(stored);
+        const resolvedUsername =
+          parsed.username ||
+          (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "");
+
+        if (!resolvedUsername) return;
+
+        setUsername(resolvedUsername);
+
+        fetch(`/api/settings?username=${encodeURIComponent(resolvedUsername)}`)
+          .then((res) => res.json())
+          .then((data: any) => {
+            if (data?.username) {
+              setUsername(data.username);
+            }
+          })
+          .catch((err) => console.error(err));
+      } catch (e) {}
     }
-
-    setUsername(resolvedUsername);
-
-    fetch(`/api/settings?username=${encodeURIComponent(resolvedUsername)}`)
-      .then((res) => res.json())
-      .then((data: any) => {
-        if (data?.username) {
-          setUsername(data.username);
-        }
-      })
-      .catch((err) => console.error(err));
   }, []);
 
-  const activeUser = username || "creator";
-  const storeUrl = `https://store.curiolot.com/${activeUser}`;
-  const bioLinkUrl = `https://link.curiolot.com/${activeUser}`;
+  const displayUser = username || "...";
+  const storeUrl = username
+    ? `https://store.curiolot.com/${username}`
+    : "https://store.curiolot.com/...";
+  const bioLinkUrl = username
+    ? `https://link.curiolot.com/${username}`
+    : "#";
   const shareText = `Check out my official digital assets and e-books on Curiolot Store!`;
 
   const handleCopy = () => {
+    if (!username) return;
     navigator.clipboard.writeText(storeUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -204,7 +207,7 @@ export default function SalesChannelsPage() {
                 Your digital storefront is automatically linked to your primary
                 profile handle at{" "}
                 <code className="text-indigo-600 font-semibold bg-indigo-50/70 px-1.5 py-0.5 rounded">
-                  link.curiolot.com/{activeUser}
+                  link.curiolot.com/{displayUser}
                 </code>
                 .
               </p>
@@ -244,7 +247,7 @@ export default function SalesChannelsPage() {
             type="button"
             onClick={() =>
               alert(
-                `Connect YouTube channel for @${activeUser} to enable automated video product cards.`
+                `Connect YouTube channel for @${displayUser} to enable automated video product cards.`
               )
             }
             className="w-full py-3 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition cursor-pointer active:scale-95"
@@ -339,7 +342,7 @@ export default function SalesChannelsPage() {
             <strong>Creator Tip:</strong> Sharing your store link immediately
             after publishing new digital assets drives high launch-day
             momentum. For Instagram and TikTok, placing{" "}
-            <strong>store.curiolot.com/{activeUser}</strong> in your bio
+            <strong>store.curiolot.com/{displayUser}</strong> in your bio
             converts profile visitors directly into customers.
           </p>
         </div>

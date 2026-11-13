@@ -5,31 +5,23 @@ export const runtime = "edge";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
-  Search, 
-  ShoppingBag, 
-  ArrowUpRight, 
-  Sparkles, 
-  Layers, 
-  Box, 
-  BookOpen, 
-  SlidersHorizontal, 
-  Percent, 
-  Store, 
-  Lock, 
-  Mail, 
-  User, 
-  ArrowRight, 
-  AlertCircle, 
-  X, 
-  CheckCircle2, 
-  Heart, 
-  TrendingUp, 
-  Zap, 
-  ShieldCheck, 
-  Globe2, 
-  FileCheck, 
-  Compass 
+import {
+  Search,
+  ShoppingBag,
+  ArrowUpRight,
+  Sparkles,
+  Layers,
+  Box,
+  BookOpen,
+  SlidersHorizontal,
+  Percent,
+  Store,
+  Lock,
+  ArrowRight,
+  AlertCircle,
+  X,
+  Heart,
+  Zap,
 } from "lucide-react";
 import CuriolotLogo from "@/components/CuriolotLogo";
 
@@ -50,51 +42,59 @@ const INITIAL_FALLBACK_PRODUCTS: any[] = [
     price: 4.99,
     originalPrice: 9.99,
     badge: "Bestseller",
-    coverUrl: "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80",
+    coverUrl:
+      "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=800&q=80",
     username: "aries",
     slug: "the-beast-whisperer",
-    description: "In a world filled with mystery and danger, there lives a young man named Lucius.",
+    description:
+      "In a world filled with mystery and danger, there lives a young man named Lucius.",
     isActive: true,
   },
   {
     id: "item_2",
     title: "Floating Botanicals 3D Element Pack",
     category: "3D Assets",
-    price: 19.00,
-    originalPrice: 35.00,
+    price: 19.0,
+    originalPrice: 35.0,
     badge: "Staff Pick",
-    coverUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
+    coverUrl:
+      "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
     username: "aries",
     slug: "floating-botanicals",
-    description: "4K ultra-detailed floating 3D botanical assets with alpha transparency.",
+    description:
+      "4K ultra-detailed floating 3D botanical assets with alpha transparency.",
     isActive: true,
   },
   {
     id: "item_3",
     title: "Cyberpunk Vector Icons & Linocut Stamps",
     category: "Vectors & Logos",
-    price: 8.50,
-    originalPrice: 15.00,
+    price: 8.5,
+    originalPrice: 15.0,
     badge: "Trending",
-    coverUrl: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=800&q=80",
+    coverUrl:
+      "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=800&q=80",
     username: "aries",
     slug: "cyberpunk-vector-icons",
-    description: "High-contrast monochrome linocut illustrations for digital creators.",
+    description:
+      "High-contrast monochrome linocut illustrations for digital creators.",
     isActive: true,
   },
   {
     id: "item_4",
     title: "Creator Economy Storefront Boilerplate",
     category: "Templates",
-    price: 29.00,
-    originalPrice: 49.00,
+    price: 29.0,
+    originalPrice: 49.0,
     badge: "Featured",
-    coverUrl: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80",
+    coverUrl:
+      "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80",
     username: "aries",
     slug: "creator-boilerplate",
-    description: "Zero-commission storefront engine built with Next.js and Cloudflare D1.",
+    description:
+      "Zero-commission storefront engine built with Next.js and Cloudflare D1.",
     isActive: true,
-  }
+  },
 ];
 
 export default function LandingHomePage() {
@@ -108,7 +108,7 @@ export default function LandingHomePage() {
 
   // Auth Modal States
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "signup" | "seller">("login");
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authName, setAuthName] = useState("");
@@ -128,10 +128,29 @@ export default function LandingHomePage() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const openAuth = (mode: "login" | "signup" | "seller") => {
+  const openAuth = (mode: "login" | "signup") => {
     setAuthMode(mode);
     setAuthError("");
     setShowAuthModal(true);
+  };
+
+  // Cek sesi sebelum masuk ke dasbor; jika belum login arahkan ke Sign Up / Log In
+  const handleProtectedDashboardAccess = (fallbackMode: "login" | "signup") => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("curiolot_session");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed?.username || parsed?.email) {
+            router.push("/dashboard");
+            return;
+          }
+        } catch (e) {
+          localStorage.removeItem("curiolot_session");
+        }
+      }
+    }
+    openAuth(fallbackMode);
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
@@ -140,16 +159,12 @@ export default function LandingHomePage() {
     setIsSubmittingAuth(true);
 
     try {
-      if (authMode === "seller") {
-        setShowAuthModal(false);
-        router.push("/dashboard");
-        return;
-      }
-
       // Registration Flow with Email Verification Barrier
       if (authMode === "signup") {
         if (!agreeTerms) {
-          setAuthError("You must agree to the Terms of Service and Privacy Policy to register.");
+          setAuthError(
+            "You must agree to the Terms of Service and Privacy Policy to register."
+          );
           setIsSubmittingAuth(false);
           return;
         }
@@ -157,12 +172,12 @@ export default function LandingHomePage() {
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            name: authName, 
-            email: authEmail, 
+          body: JSON.stringify({
+            name: authName,
+            email: authEmail,
             password: authPassword,
             terms: true,
-            agreeTerms: true
+            agreeTerms: true,
           }),
         });
 
@@ -172,13 +187,11 @@ export default function LandingHomePage() {
           return;
         }
 
-        // Tahan sesi dan tampilkan instruksi aktivasi email
         alert(
-          data?.message || 
-          `Verification link sent to ${authEmail}. Please check your inbox and activate your account before logging in.`
+          data?.message ||
+            `Verification link sent to ${authEmail}. Please check your inbox and activate your account before logging in.`
         );
 
-        // Alihkan tampilan ke tab Sign In
         setAuthMode("login");
         setAuthPassword("");
         setAuthError("");
@@ -199,7 +212,10 @@ export default function LandingHomePage() {
       }
 
       if (typeof window !== "undefined") {
-        localStorage.setItem("curiolot_session", JSON.stringify(data?.user || { email: authEmail }));
+        localStorage.setItem(
+          "curiolot_session",
+          JSON.stringify(data?.user || { email: authEmail })
+        );
       }
 
       setShowAuthModal(false);
@@ -221,16 +237,20 @@ export default function LandingHomePage() {
       if (selectedCategory === "Special Deals") {
         matchesCat = Boolean(
           (product.originalPrice && product.originalPrice > product.price) ||
-          (product.badge && product.badge.toLowerCase().includes("sale"))
+            (product.badge && product.badge.toLowerCase().includes("sale"))
         );
       } else if (selectedCategory !== "All Assets") {
-        const catConfig = MARKETPLACE_CATEGORIES.find((c) => c.name === selectedCategory);
+        const catConfig = MARKETPLACE_CATEGORIES.find(
+          (c) => c.name === selectedCategory
+        );
         if (catConfig && catConfig.match.length > 0) {
           matchesCat = catConfig.match.some((keyword) =>
             product.category.toLowerCase().includes(keyword)
           );
         } else {
-          matchesCat = product.category.toLowerCase().includes(selectedCategory.toLowerCase());
+          matchesCat = product.category
+            .toLowerCase()
+            .includes(selectedCategory.toLowerCase());
         }
       }
 
@@ -239,7 +259,8 @@ export default function LandingHomePage() {
         const q = searchQuery.toLowerCase();
         matchesSearch =
           product.title.toLowerCase().includes(q) ||
-          (product.description && product.description.toLowerCase().includes(q)) ||
+          (product.description &&
+            product.description.toLowerCase().includes(q)) ||
           product.category.toLowerCase().includes(q);
       }
 
@@ -249,18 +270,21 @@ export default function LandingHomePage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased selection:bg-emerald-500 selection:text-white pb-24">
-      
       {/* 1. Global Navigation Bar */}
       <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between gap-4">
-          
           <div className="flex items-center gap-6">
             <CuriolotLogo size="md" variant="dark" />
 
             <div className="hidden lg:flex items-center gap-5 text-xs font-bold text-slate-600">
-              <a href="#catalog" className="hover:text-slate-950 transition flex items-center gap-1">
+              <a
+                href="#catalog"
+                className="hover:text-slate-950 transition flex items-center gap-1"
+              >
                 <span>Marketplace</span>
-                <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-50 text-indigo-600 font-extrabold">Discover</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-indigo-50 text-indigo-600 font-extrabold">
+                  Discover
+                </span>
               </a>
               <a href="#comparison" className="hover:text-slate-950 transition">
                 0% Fee Model
@@ -294,7 +318,7 @@ export default function LandingHomePage() {
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={() => openAuth("seller")}
+              onClick={() => handleProtectedDashboardAccess("signup")}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 hover:text-slate-950 px-3 py-2 rounded-xl hover:bg-slate-100 transition tracking-tight cursor-pointer"
             >
               <Store className="w-3.5 h-3.5 text-indigo-600" />
@@ -318,14 +342,12 @@ export default function LandingHomePage() {
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
-
         </div>
       </nav>
 
       {/* 2. Hero Section */}
       <section className="relative pt-16 pb-20 sm:pt-20 sm:pb-24 overflow-hidden bg-gradient-to-b from-white via-slate-50 to-[#F8FAFC]">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center space-y-6 relative z-10">
-          
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
             <Zap className="w-3.5 h-3.5 fill-emerald-600 text-emerald-600" />
             <span>0% Platform Commission • Direct Payout to Your Gateway</span>
@@ -339,12 +361,14 @@ export default function LandingHomePage() {
           </h1>
 
           <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            The independent creator marketplace for e-books, vector graphics, 3D elements, and templates. Connect your own payment gateway with zero holding periods and instant automated delivery.
+            The independent creator marketplace for e-books, vector graphics, 3D
+            elements, and templates. Connect your own payment gateway with zero
+            holding periods and instant automated delivery.
           </p>
 
           <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
             <button
-              onClick={() => openAuth("seller")}
+              onClick={() => handleProtectedDashboardAccess("signup")}
               className="w-full sm:w-auto px-8 py-3.5 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-xs rounded-2xl transition shadow-xl shadow-slate-950/15 active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Create Store for Free</span>
@@ -361,7 +385,8 @@ export default function LandingHomePage() {
           </div>
 
           <p className="text-[11px] text-slate-400 font-medium pt-1">
-            No credit card required to start • Encrypted Cloudflare R2 Vault included
+            No credit card required to start • Encrypted Cloudflare R2 Vault
+            included
           </p>
         </div>
       </section>
@@ -371,20 +396,36 @@ export default function LandingHomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
             <div className="space-y-0.5">
-              <p className="text-2xl sm:text-3xl font-black text-slate-950">0%</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Platform Take Rate</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-950">
+                0%
+              </p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Platform Take Rate
+              </p>
             </div>
             <div className="space-y-0.5">
-              <p className="text-2xl sm:text-3xl font-black text-emerald-600">Instant</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Settlement Speed</p>
+              <p className="text-2xl sm:text-3xl font-black text-emerald-600">
+                Instant
+              </p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Settlement Speed
+              </p>
             </div>
             <div className="space-y-0.5">
-              <p className="text-2xl sm:text-3xl font-black text-slate-950">200+</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Countries Supported</p>
+              <p className="text-2xl sm:text-3xl font-black text-slate-950">
+                200+
+              </p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Countries Supported
+              </p>
             </div>
             <div className="space-y-0.5">
-              <p className="text-2xl sm:text-3xl font-black text-indigo-600">Cloudflare R2</p>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Encrypted File Vault</p>
+              <p className="text-2xl sm:text-3xl font-black text-indigo-600">
+                Cloudflare R2
+              </p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Encrypted File Vault
+              </p>
             </div>
           </div>
         </div>
@@ -420,21 +461,25 @@ export default function LandingHomePage() {
         <div className="flex items-center justify-between mt-8 mb-6">
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-              {selectedCategory === "All Assets" ? "Trending Digital Works" : selectedCategory}
+              {selectedCategory === "All Assets"
+                ? "Trending Digital Works"
+                : selectedCategory}
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              {searchQuery ? `Showing results for "${searchQuery}"` : "Discover original creative assets published by independent creators"}
+              {searchQuery
+                ? `Showing results for "${searchQuery}"`
+                : "Discover original creative assets published by independent creators"}
             </p>
           </div>
           <span className="text-xs font-semibold text-slate-400">
-            {filteredProducts.length} Assets Found
+            {isLoading ? "Loading..." : `${filteredProducts.length} Assets Found`}
           </span>
         </div>
 
         {/* Dynamic Product Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredProducts.map((product) => {
-            const productUsername = product.username || "aries";
+            const productUsername = product.username || "creator";
             const isSaved = wishlist[product.id] || false;
 
             return (
@@ -458,7 +503,11 @@ export default function LandingHomePage() {
                     onClick={() => toggleWishlist(product.id)}
                     className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-600 hover:text-rose-600 transition shadow-xs cursor-pointer"
                   >
-                    <Heart className={`w-3.5 h-3.5 ${isSaved ? "text-rose-600 fill-rose-600" : ""}`} />
+                    <Heart
+                      className={`w-3.5 h-3.5 ${
+                        isSaved ? "text-rose-600 fill-rose-600" : ""
+                      }`}
+                    />
                   </button>
                 </div>
 
@@ -466,7 +515,10 @@ export default function LandingHomePage() {
                   <div>
                     <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
                       <span>{product.category}</span>
-                      <Link href={`/${productUsername}`} className="hover:text-slate-900 hover:underline">
+                      <Link
+                        href={`/${productUsername}`}
+                        className="hover:text-slate-900 hover:underline"
+                      >
                         @{productUsername}
                       </Link>
                     </div>
@@ -483,7 +535,9 @@ export default function LandingHomePage() {
                   <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between">
                     <div>
                       {product.price === 0 ? (
-                        <span className="text-base font-extrabold text-emerald-600">FREE</span>
+                        <span className="text-base font-extrabold text-emerald-600">
+                          FREE
+                        </span>
                       ) : (
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-base font-extrabold text-slate-900">
@@ -520,7 +574,8 @@ export default function LandingHomePage() {
             Why Creators Switch to Curiolot
           </h3>
           <p className="text-xs sm:text-sm text-slate-500">
-            Compare transparent direct selling against legacy fee-heavy platforms.
+            Compare transparent direct selling against legacy fee-heavy
+            platforms.
           </p>
         </div>
 
@@ -529,29 +584,53 @@ export default function LandingHomePage() {
             <thead className="bg-slate-50 border-b border-slate-200/80 text-[11px] uppercase tracking-wider font-extrabold text-slate-500">
               <tr>
                 <th className="p-4 sm:p-5">Feature</th>
-                <th className="p-4 sm:p-5 text-emerald-700 bg-emerald-50/50">Curiolot Commerce</th>
+                <th className="p-4 sm:p-5 text-emerald-700 bg-emerald-50/50">
+                  Curiolot Commerce
+                </th>
                 <th className="p-4 sm:p-5 text-slate-400">Gumroad / Etsy</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               <tr>
-                <td className="p-4 sm:p-5 font-bold text-slate-800">Platform Commission</td>
-                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">0% Cut</td>
-                <td className="p-4 sm:p-5 text-slate-500">10% + $0.30 per sale</td>
+                <td className="p-4 sm:p-5 font-bold text-slate-800">
+                  Platform Commission
+                </td>
+                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">
+                  0% Cut
+                </td>
+                <td className="p-4 sm:p-5 text-slate-500">
+                  10% + $0.30 per sale
+                </td>
               </tr>
               <tr>
-                <td className="p-4 sm:p-5 font-bold text-slate-800">Payout Settlement</td>
-                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">Instant Direct to Wallet</td>
-                <td className="p-4 sm:p-5 text-slate-500">7 to 21 Days Holding</td>
+                <td className="p-4 sm:p-5 font-bold text-slate-800">
+                  Payout Settlement
+                </td>
+                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">
+                  Instant Direct to Wallet
+                </td>
+                <td className="p-4 sm:p-5 text-slate-500">
+                  7 to 21 Days Holding
+                </td>
               </tr>
               <tr>
-                <td className="p-4 sm:p-5 font-bold text-slate-800">Payment Gateway Choice</td>
-                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">PayPal, Stripe, Lemon, Paddle</td>
-                <td className="p-4 sm:p-5 text-slate-500">Locked to platform processor</td>
+                <td className="p-4 sm:p-5 font-bold text-slate-800">
+                  Payment Gateway Choice
+                </td>
+                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">
+                  PayPal, Stripe, Lemon, Paddle
+                </td>
+                <td className="p-4 sm:p-5 text-slate-500">
+                  Locked to platform processor
+                </td>
               </tr>
               <tr>
-                <td className="p-4 sm:p-5 font-bold text-slate-800">Custom Bio-Link Handle</td>
-                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">store.curiolot.com/aries</td>
+                <td className="p-4 sm:p-5 font-bold text-slate-800">
+                  Custom Bio-Link Handle
+                </td>
+                <td className="p-4 sm:p-5 font-extrabold text-emerald-700 bg-emerald-50/30">
+                  store.curiolot.com/yourname
+                </td>
                 <td className="p-4 sm:p-5 text-slate-500">Generic shop link</td>
               </tr>
             </tbody>
@@ -563,13 +642,25 @@ export default function LandingHomePage() {
       <footer className="border-t border-slate-200/80 bg-white py-12 text-slate-500 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-slate-900">Curiolot Commerce</span>
+            <span className="font-extrabold text-slate-900">
+              Curiolot Commerce
+            </span>
             <span>• Independent Digital Infrastructure</span>
           </div>
           <div className="flex items-center gap-5 text-slate-600 font-medium">
-            <Link href="/terms" className="hover:text-slate-950 transition">Terms of Service</Link>
-            <Link href="/privacy" className="hover:text-slate-950 transition">Privacy Policy</Link>
-            <Link href="/dashboard" className="hover:text-slate-950 transition">Creator Dashboard</Link>
+            <Link href="/terms" className="hover:text-slate-950 transition">
+              Terms of Service
+            </Link>
+            <Link href="/privacy" className="hover:text-slate-950 transition">
+              Privacy Policy
+            </Link>
+            <button
+              type="button"
+              onClick={() => handleProtectedDashboardAccess("login")}
+              className="hover:text-slate-950 transition cursor-pointer"
+            >
+              Creator Dashboard
+            </button>
           </div>
         </div>
       </footer>
@@ -587,12 +678,12 @@ export default function LandingHomePage() {
 
             <div className="mb-6">
               <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center mb-3 shadow-sm">
-                {authMode === "seller" ? <Store className="w-6 h-6 text-indigo-400" /> : <Lock className="w-6 h-6" />}
+                <Lock className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-extrabold text-slate-900">
-                {authMode === "seller" && "Start Selling on Curiolot"}
-                {authMode === "login" && "Welcome Back to Curiolot"}
-                {authMode === "signup" && "Create Your Free Account"}
+                {authMode === "login"
+                  ? "Welcome Back to Curiolot"
+                  : "Create Your Free Storefront"}
               </h3>
             </div>
 
@@ -610,7 +701,11 @@ export default function LandingHomePage() {
                   setAuthMode("login");
                   setAuthError("");
                 }}
-                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "login" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500"}`}
+                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
+                  authMode === "login"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-500"
+                }`}
               >
                 Log In
               </button>
@@ -620,26 +715,22 @@ export default function LandingHomePage() {
                   setAuthMode("signup");
                   setAuthError("");
                 }}
-                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "signup" ? "bg-white text-slate-900 shadow-xs font-bold" : "text-slate-500"}`}
+                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${
+                  authMode === "signup"
+                    ? "bg-white text-slate-900 shadow-xs font-bold"
+                    : "text-slate-500"
+                }`}
               >
                 Sign Up
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode("seller");
-                  setAuthError("");
-                }}
-                className={`flex-1 py-2 rounded-lg transition cursor-pointer ${authMode === "seller" ? "bg-white text-indigo-600 shadow-xs font-bold" : "text-slate-500"}`}
-              >
-                Open Store
               </button>
             </div>
 
             <form onSubmit={handleAuthSubmit} className="space-y-4">
               {authMode === "signup" && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Full Name
+                  </label>
                   <input
                     type="text"
                     required
@@ -652,7 +743,9 @@ export default function LandingHomePage() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Email Address
+                </label>
                 <input
                   type="email"
                   required
@@ -664,7 +757,9 @@ export default function LandingHomePage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Password
+                </label>
                 <input
                   type="password"
                   required
@@ -675,7 +770,6 @@ export default function LandingHomePage() {
                 />
               </div>
 
-              {/* Checkbox & Terms of Service dengan styling persis Curiolot Link */}
               {authMode === "signup" && (
                 <div className="flex items-start gap-2.5 text-left pt-1">
                   <input
@@ -686,7 +780,10 @@ export default function LandingHomePage() {
                     className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
                     required
                   />
-                  <label htmlFor="termsCheck" className="text-xs text-slate-500 leading-snug cursor-pointer select-none">
+                  <label
+                    htmlFor="termsCheck"
+                    className="text-xs text-slate-500 leading-snug cursor-pointer select-none"
+                  >
                     I have read and agree to the{" "}
                     <Link
                       href="/terms"
@@ -702,7 +799,8 @@ export default function LandingHomePage() {
                       className="font-semibold text-emerald-600 hover:text-emerald-700 underline transition-colors"
                     >
                       Privacy Policy
-                    </Link>.
+                    </Link>
+                    .
                   </label>
                 </div>
               )}
@@ -712,13 +810,16 @@ export default function LandingHomePage() {
                 disabled={isSubmittingAuth}
                 className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition active:scale-95 cursor-pointer disabled:opacity-50"
               >
-                {isSubmittingAuth ? "Processing..." : authMode === "login" ? "Log In" : "Continue"}
+                {isSubmittingAuth
+                  ? "Processing..."
+                  : authMode === "login"
+                  ? "Log In"
+                  : "Create Free Account"}
               </button>
             </form>
           </div>
         </div>
       )}
-
     </div>
   );
 }

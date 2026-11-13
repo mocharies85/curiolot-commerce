@@ -37,23 +37,21 @@ export default function EarningsPage() {
   const [showPayPalModal, setShowPayPalModal] = useState(false);
   const [modalCopied, setModalCopied] = useState(false);
 
-  // Ambil username dinamis dari sesi login aktif
+  // Ambil username dinamis hanya jika sesi login aktif tersedia
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("curiolot_session");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const resolvedUsername =
-            parsed.username ||
-            (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "vanth");
+      if (!stored) return;
+
+      try {
+        const parsed = JSON.parse(stored);
+        const resolvedUsername =
+          parsed.username ||
+          (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "");
+        if (resolvedUsername) {
           setUsername(resolvedUsername);
-        } catch (e) {
-          setUsername("vanth");
         }
-      } else {
-        setUsername("vanth");
-      }
+      } catch (e) {}
     }
   }, []);
 
