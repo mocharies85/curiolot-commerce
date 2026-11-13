@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Plus,
   LayoutDashboard,
@@ -16,6 +16,7 @@ import {
   Bell,
   Sparkles,
   Link2,
+  LogOut,
 } from "lucide-react";
 import CuriolotLogo from "@/components/CuriolotLogo";
 
@@ -25,34 +26,68 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Dynamic user state based on active login session
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [currentUser, setCurrentUser] = useState({
-    name: "Creator",
-    username: "vanth",
+    name: "",
+    username: "",
   });
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("curiolot_session");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          const resolvedUsername =
-            parsed.username ||
-            (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "creator");
-          const resolvedName =
-            parsed.name ||
-            resolvedUsername.charAt(0).toUpperCase() + resolvedUsername.slice(1);
 
-          setCurrentUser({
-            name: resolvedName,
-            username: resolvedUsername,
-          });
-        } catch (e) {}
+      // Tolak pengunjung tanpa sesi aktif dan arahkan ke halaman login
+      if (!stored) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stored);
+        const resolvedUsername =
+          parsed.username ||
+          (parsed.email ? parsed.email.split("@")[0].toLowerCase() : "");
+
+        if (!resolvedUsername) {
+          localStorage.removeItem("curiolot_session");
+          router.replace("/login");
+          return;
+        }
+
+        const resolvedName =
+          parsed.name ||
+          resolvedUsername.charAt(0).toUpperCase() + resolvedUsername.slice(1);
+
+        setCurrentUser({
+          name: resolvedName,
+          username: resolvedUsername,
+        });
+        setIsCheckingAuth(false);
+      } catch (e) {
+        localStorage.removeItem("curiolot_session");
+        router.replace("/login");
       }
     }
-  }, []);
+  }, [router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("curiolot_session");
+    router.replace("/login");
+  };
+
+  // Tahan tampilan dasbor selama pengecekan sesi belum lolos
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-3 text-slate-500">
+          <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-medium">Verifying creator session...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Sidebar navigation menu items
   const NAV_ITEMS = [
@@ -160,6 +195,14 @@ export default function DashboardLayout({
                 store.curiolot.com/{currentUser.username}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Sign Out"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
